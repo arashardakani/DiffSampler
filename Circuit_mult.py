@@ -24,9 +24,9 @@ class Circuit(nn.Module):
         x1, x2 = self.EMB(input)
 
         out = self.Mult(x1,x2)
-        '''print('x1:', x1)
+        print('x1:', x1)
         print('x2:', x2)
-        print('out:', out)'''
+        print('out:', out)
         
         return out
 
@@ -36,8 +36,9 @@ class EMB(nn.Module):
         super().__init__()
         self.data1 = nn.Embedding(1, 4)
         #self.data1.weight.data.mul_(0.01)
-        #self.data1.requires_grad = False
+        
         self.data2 = nn.Embedding(1, 4)
+        
         #self.data2.weight.data.mul_(0.01)
         self.activation1 = Sgn()
         self.activation2 = Sgn()
@@ -61,6 +62,9 @@ model = Circuit().to(device)
 
 #target = torch.ones(1,8, requires_grad = False, device = device) * -1
 target = torch.empty(1,8).random_(2).to(device) * 2. - 1.
+target[0,-1] = -1
+target[0,-2] = -1
+target = target * torch.pow(2.,torch.arange(0,8, device= device))
 print('target:', target)
 loss = MSELoss(reduction='sum')
 optim = torch.optim.SGD(model.parameters(), lr=lr) #torch.optim.
@@ -74,10 +78,10 @@ for epoch in range(num_train_epochs):
     input = torch.LongTensor([0]).to(device)
     outputs = model(input)
     
-    l = loss(outputs, target)
+    l = loss(outputs * torch.pow(2.,torch.arange(0,8, device= device)), target)
     l.backward()
     optim.step()
-    print('output:', outputs)
+    #print('output:', outputs)
 
 print('target:', target)
 

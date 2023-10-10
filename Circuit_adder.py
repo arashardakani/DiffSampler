@@ -37,13 +37,16 @@ class EMB(nn.Module):
         self.data2.weight.data.mul_(0.01)
         self.activation1 = Sgn()
         self.activation2 = Sgn()
+        #print('Input1 before training:', self.activation1.apply(self.data1(input)))
+        #print('Input2 before training:', self.activation1.apply(self.data1(input)))
 
     def forward(self, input):
         data1 = self.activation1.apply(self.data1(input))
         data2 = self.activation2.apply(self.data2(input))
         #print(data)
         #print(data1,data2)
-
+        print('input1 after training:', data1.data.cpu())
+        print('input2 after training:', data2.data.cpu())
         return data1, data2
 
 
@@ -73,6 +76,8 @@ for epoch in range(num_train_epochs):
     l = loss(outputs, target)
     l.backward()
     optim.step()
+    print('output:', outputs.data.cpu())
+
 print('output:', outputs)
 
 

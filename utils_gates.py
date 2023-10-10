@@ -131,6 +131,29 @@ class XOR(nn.Module):
         output = self.AND(torch.concat([output1,output2], dim=-1))
         return output
 
+class bin2dec(nn.Module):
+    def __init__(self, num_in):
+        super().__init__()
+        self.dense = nn.Linear(num_in, 1)
+        self.dense.weight.data = torch.pow(2.,torch.arange(0,num_in))
+        self.dense.bias.data.fill_(0.)
+        self.dense.weight.requires_grad = False
+        self.dense.bias.requires_grad = False
+
+    def forward(self, input):
+        output = self.dense((input+1.)/2.)
+        return output
+
+
+class dec2bin(nn.Module):
+    def __init__(self, num_in):
+        super().__init__()
+        self.dec2binconversion = dec2binconversion(num_in)
+
+    def forward(self, input):
+        output = self.dec2binconversion.apply(input)
+        return output
+
 
 class FAdder(nn.Module):
     def __init__(self):
@@ -292,6 +315,20 @@ class Amp(torch.autograd.Function):
         input = ctx.saved_tensors
         grad_input = grad_output.clone()
         return grad_input * torch.sigmoid(grad_input.sign() * input[0] + 2.)
+
+
+class dec2binconversion(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input, num_in):
+        mask = 2 ** torch.arange(num_in - 1, -1, -1).to(input.device, input.dtype)
+        ctx.save_for_backward(num_in)
+        return input.unsqueeze(-1).bitwise_and(mask).ne(0).float()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        num_in = ctx.saved_tensors[0]
+        
+        return (grad_output * torch.pow(2.,torch.arange(0,num_in))).sum()
 
 
 

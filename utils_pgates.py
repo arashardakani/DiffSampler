@@ -16,7 +16,7 @@ class AND(nn.Module):
         self.activation = Sgn()
 
     def forward(self, input):
-        output = torch.prod(input, dim = -1)
+        output = torch.prod(input, dim = -1).unsqueeze(-1)
         return output
 
 
@@ -25,7 +25,7 @@ class OR(nn.Module):
         super().__init__()
 
     def forward(self, input):
-        output = 1 - torch.prod(1 - input, dim = -1)
+        output = 1 - torch.prod(1 - input, dim = -1).unsqueeze(-1)
         return output
 
 
