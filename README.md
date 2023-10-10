@@ -9,6 +9,6 @@ The binary values are represented using -1 and 1. The index 0 in vectors denotes
 
 
 
-To run the pigeon-hole promblems:
+To run the pigeon-hole problems:
 
 CUDA_VISIBLE_DEVICES=0 python pigeon_hole_problems_prob.py --cnf_name_or_path ../pigeon_hole_problems/pigeon_hole_4-SAT.cnf
