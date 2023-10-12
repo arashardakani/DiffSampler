@@ -40,71 +40,6 @@ class BaseCircuit(nn.Module):
         raise NotImplementedError
 
 
-class CombinationalCircuit(BaseCircuit):
-    """Combinational Circuit instantiated from a list a PySAT CNF problem"""
-
-    def __init__(self, cnf_problem: CNF = None, **kwargs):
-        # read cnf file
-        assert cnf_problem is not None
-        self.cnf_problem = cnf_problem
-        self.use_pgates = kwargs["use_pgates"]
-
-        # define input shape
-        # for SAT problems, input is a single k-bit vector
-        # where k is the number of variables in the problem
-        self.input_shape = [cnf_problem.nv]
-
-        # generate input embedding layer
-        super().__init__(input_shape=self.input_shape, **kwargs)
-
-        # generate intermediate layers
-        self.intermediate_layers = nn.ModuleList(
-            [
-                # pgates.OR() if self.use_pgates else gates.OR()
-                pOR()
-                for i in range(len(cnf_problem.clauses))
-            ]
-        )
-        # generate final AND gate (PoS form)
-        self.and_gate = pAND()
-        # package all layers into a dictionary
-        self.build_model(**kwargs)
-
-    def build_model(self, **kwargs):
-        """Package layers into a dictionary"""
-        self.layers = {
-            "emb": self.input_embedding,
-            "intermediate": self.intermediate_layers,
-            "and": self.and_gate,
-        }
-
-    def forward(self, input):
-        x = self.layers["emb"](input)
-        intermediate_out = torch.zeros(
-            input.size()[0], len(self.cnf_problem.clauses)
-        ).to(input.device)
-        for i in range(len(self.cnf_problem.clauses)):
-            idx = [abs(x) - 1 for x in self.cnf_problem.clauses[i]]
-            y = torch.where(
-                torch.FloatTensor(self.cnf_problem.clauses[i]).to(x.device) > 0.0,
-                x[:, idx],
-                1.0 - x[:, idx],
-            )
-            intermediate_out[:, i] = self.layers["intermediate"][i](y)
-        out = self.layers["and"](intermediate_out)
-        return out
-
-    def get_input_weights(self):
-        """Get weights of the input embedding layer"""
-        assert self.layers["emb"] is not None
-        assert len(self.layers["emb"].embeddings) == 1
-        weights = self.layers["emb"].get_weights()[0]
-        if self.use_pgates:
-            return ((torch.sign(weights) + 1.0) / 2.0).long().cpu().tolist()
-        else:
-            raise NotImplementedError
-
-
 class PIEmbedding(nn.Module):
     def __init__(
         self,
@@ -145,3 +80,67 @@ class PIEmbedding(nn.Module):
         """Get weights of the embedding layers"""
         weights = [emb.weight.data for emb in self.embeddings]
         return weights
+
+
+class CombinationalCircuit(BaseCircuit):
+    """Combinational Circuit instantiated from a list a PySAT CNF problem"""
+
+    def __init__(self, cnf_problem: CNF = None, **kwargs):
+        # read cnf file
+        assert cnf_problem is not None
+        self.cnf_problem = cnf_problem
+        self.use_pgates = kwargs["use_pgates"]
+
+        # define input shape
+        # for SAT problems, input is a single k-bit vector
+        # where k is the number of variables in the problem
+        self.input_shape = [cnf_problem.nv]
+
+        # generate input embedding layer
+        super().__init__(input_shape=self.input_shape, **kwargs)
+
+        # generate intermediate layers
+        self.intermediate_layers = nn.ModuleList(
+            [
+                # pgates.OR() if self.use_pgates else gates.OR()
+                pOR() for i in range(len(cnf_problem.clauses))
+            ]
+        )
+        # generate final AND gate (PoS form)
+        self.and_gate = pAND()
+        # package all layers into a dictionary
+        self.build_model(**kwargs)
+
+    def build_model(self, **kwargs):
+        """Package layers into a dictionary"""
+        self.layers = {
+            "emb": self.input_embedding,
+            "intermediate": self.intermediate_layers,
+            "and": self.and_gate,
+        }
+
+    def forward(self, input):
+        x = self.layers["emb"](input)
+        intermediate_out = torch.zeros(
+            input.size()[0], len(self.cnf_problem.clauses)
+        ).to(input.device)
+        for i in range(len(self.cnf_problem.clauses)):
+            idx = [abs(x) - 1 for x in self.cnf_problem.clauses[i]]
+            y = torch.where(
+                torch.FloatTensor(self.cnf_problem.clauses[i]).to(x.device) > 0.0,
+                x[:, idx],
+                1.0 - x[:, idx],
+            )
+            intermediate_out[:, i] = self.layers["intermediate"][i](y)
+        out = self.layers["and"](intermediate_out)
+        return out
+
+    def get_input_weights(self):
+        """Get weights of the input embedding layer"""
+        assert self.layers["emb"] is not None
+        assert len(self.layers["emb"].embeddings) == 1
+        weights = self.layers["emb"].get_weights()[0]
+        if self.use_pgates:
+            return ((torch.sign(weights) + 1.0) / 2.0).long().cpu().tolist()[0]
+        else:
+            raise NotImplementedError

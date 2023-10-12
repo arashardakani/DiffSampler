@@ -48,6 +48,11 @@ def parse_args():
         action="store_true",
         help="Whether to run latency experiment or not",
     )
+    parser.add_argument(
+        "--verify_solution",
+        action="store_true",
+        help="Whether to run a proof-based solver to verify the solution or not",
+    )
     args = parser.parse_args()
 
     return args
