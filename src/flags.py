@@ -3,7 +3,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Solving SAT problems using neural networks."
+        description="Solving SAT/SMT/Verification problems using neural networks."
     )
     # Problem parameters
     parser.add_argument(

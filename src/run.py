@@ -42,7 +42,10 @@ class Runner(object):
         self._setup_problems()
 
     def _setup_problems(self):
-        """Setup the problem."""
+        """Setup the problem.
+        Implementation will later be extended to support other problem types. (currnetly only SAT)
+            - SAT: dataset will be either (1) .cnf files in args.dataset_path or (2) PySAT PHP problems.
+        """
         if self.problem_type == "sat":
             if self.args.dataset_path is None:
                 logging.info("No dataset found. Generating PySAT PHP problems.")
@@ -64,7 +67,9 @@ class Runner(object):
             raise NotImplementedError
 
     def _initialize_model(self, prob_id: int = 0):
-        """Initialize problem-specifc model, loss, optimizer and input, target tensors.
+        """Initialize problem-specifc model, loss, optimizer and input, target tensors
+        for a given problem instance, e.g. a SAT problem (in CNF form).
+        Note: must re-initialize the model for each problem instance.
 
         Args:
             prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
@@ -102,7 +107,9 @@ class Runner(object):
         random.seed(self.args.seed)
 
     def _check_complete(self, epoch: int, loss: torch.Tensor):
-        """Check if the solution has been found."""
+        """Check if the solution has been found.
+        Used for early stopping backpropagation (grad descent) if the solution has been found.
+        """
         current_solution_prob = self.solution_prob_func(loss)
         # logging.info('Loss @ epoch %d: %f', epoch, loss)
         # logging.info('Probability of getting 1 as the output @ epoch %d: %f', epoch, current_solution_prob)
@@ -110,7 +117,7 @@ class Runner(object):
             self.solution_found = True
             return True
 
-    def run_back_prop(self, train_loop):
+    def run_back_prop(self, train_loop: range):
         """Run backpropagation for the given number of epochs."""
         for epoch in train_loop:
             self.model.train()
@@ -155,6 +162,11 @@ class Runner(object):
         )
 
     def run_baseline(self, prob_id: int = 0):
+        """Run the baseline solver.
+
+        Args:
+            prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
+        """
         self.baseline._setup_problem(prob_id=prob_id)
         elapsed_time, result = self.baseline.run()
         logging.info("--------------------")
@@ -189,6 +201,7 @@ class Runner(object):
             )
 
     def run_all_with_baseline(self):
+        """Run all the problems in the dataset given as argument to the Runner."""
         assert self.args.latency_experiment
         for prob_id in range(len(self.problems)):
             self.results[prob_id].update(
