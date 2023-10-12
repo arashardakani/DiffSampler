@@ -1,4 +1,3 @@
-
 import math
 import pdb
 
@@ -8,6 +7,7 @@ from torch.nn import Parameter
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
+
 
 class Amp(torch.autograd.Function):
     @staticmethod
@@ -19,14 +19,15 @@ class Amp(torch.autograd.Function):
     def backward(ctx, grad_output):
         input = ctx.saved_tensors
         grad_input = grad_output.clone()
-        return grad_input * torch.sigmoid(grad_input.sign() * input[0] + 2.)
+        return grad_input * torch.sigmoid(grad_input.sign() * input[0] + 2.0)
+
 
 class AND(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(1.)
-        self.dense.bias.data.fill_(-1. * num_in + 1.)
+        self.dense.weight.data.fill_(1.0)
+        self.dense.bias.data.fill_(-1.0 * num_in + 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -43,8 +44,8 @@ class OR(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(1.)
-        self.dense.bias.data.fill_(1. * num_in - 1.)
+        self.dense.weight.data.fill_(1.0)
+        self.dense.bias.data.fill_(1.0 * num_in - 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -55,15 +56,14 @@ class OR(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class NOT(nn.Module):
     def __init__(self):
         super().__init__()
         self.dense = nn.Linear(1, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(0.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(0.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -73,16 +73,14 @@ class NOT(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
-
 
 
 class NOR(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(-1. * num_in + 1.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(-1.0 * num_in + 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -93,15 +91,14 @@ class NOR(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class NAND(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(1. * num_in - 1.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(1.0 * num_in - 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -112,7 +109,6 @@ class NAND(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class XNOR(nn.Module):
@@ -125,7 +121,7 @@ class XNOR(nn.Module):
     def forward(self, input):
         output1 = self.AND(input)
         output2 = self.NOR(input)
-        output = self.OR(torch.concat([output1,output2], dim=-1))
+        output = self.OR(torch.concat([output1, output2], dim=-1))
         return output
 
 
@@ -139,7 +135,7 @@ class XOR(nn.Module):
     def forward(self, input):
         output1 = self.OR(input)
         output2 = self.NAND(input)
-        output = self.AND(torch.concat([output1,output2], dim=-1))
+        output = self.AND(torch.concat([output1, output2], dim=-1))
         return output
 
 
@@ -247,7 +243,7 @@ class XOR(nn.Module):
 #     def forward(self, input1, input2, sel):
 #         out1 = self.AND1(input1, self.NOT(sel).repeat(1,self.num_in))
 #         out2 = self.AND2(input2, sel.repeat(1,self.num_in))
-#         out = self.OR(out1, out2)        
+#         out = self.OR(out1, out2)
 #         return out
 
 
@@ -262,7 +258,7 @@ class XOR(nn.Module):
 #         for i in range(int(math.log2(num_port))):
 #             ports = int(ports/2)
 #             self.layer[i] = nn.ModuleList([MUX2(num_in)for _ in range(ports)])
-            
+
 
 #     def forward(self, input, sel):
 #         out = {}
@@ -287,16 +283,3 @@ class XOR(nn.Module):
 #         input = ctx.saved_tensors
 #         grad_input = grad_output.clone()
 #         return grad_input #* (1 - torch.nn.functional.tanh(input[0]+0.1*torch.randn(1).to(input[0].device))**2)
-
-
-
-
-
-
-
-
-
-
-
-
-
