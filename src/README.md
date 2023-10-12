@@ -10,7 +10,8 @@
 # run code
 
 ```[bash]
-CUDA_VISIBLE_DEVICES=0  python src/run.py --cnf_name_or_path {cnf_file_path}
+CUDA_VISIBLE_DEVICES=$GPU_ID python src/run.py --num_epochs 100 -v -l --dataset_path "data/flat30/*.cnf"
+CUDA_VISIBLE_DEVICES=$GPU_ID python src/run.py --num_epochs 100 -v -l --dataset_path "data/pigeon_hole/*.cnf"
 ```
 
 
