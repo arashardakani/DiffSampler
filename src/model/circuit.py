@@ -85,16 +85,16 @@ class PIEmbedding(nn.Module):
 class CombinationalCircuit(BaseCircuit):
     """Combinational Circuit instantiated from a list a PySAT CNF problem"""
 
-    def __init__(self, cnf_problem: CNF = None, **kwargs):
+    def __init__(self, **kwargs):
         # read cnf file
-        assert cnf_problem is not None
-        self.cnf_problem = cnf_problem
+        assert kwargs["cnf_problem"] is not None
+        self.cnf_problem = kwargs["cnf_problem"]
         self.use_pgates = kwargs["use_pgates"]
 
         # define input shape
         # for SAT problems, input is a single k-bit vector
         # where k is the number of variables in the problem
-        self.input_shape = [cnf_problem.nv]
+        self.input_shape = [self.cnf_problem.nv]
 
         # generate input embedding layer
         super().__init__(input_shape=self.input_shape, **kwargs)
@@ -103,7 +103,7 @@ class CombinationalCircuit(BaseCircuit):
         self.intermediate_layers = nn.ModuleList(
             [
                 # pgates.OR() if self.use_pgates else gates.OR()
-                pOR() for i in range(len(cnf_problem.clauses))
+                pOR() for i in range(len(self.cnf_problem.clauses))
             ]
         )
         # generate final AND gate (PoS form)
@@ -144,3 +144,90 @@ class CombinationalCircuit(BaseCircuit):
             return ((torch.sign(weights) + 1.0) / 2.0).long().cpu().tolist()[0]
         else:
             raise NotImplementedError
+
+class LargeOR(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x, chunk_size):
+        x_list = torch.split(x, chunk_size, dim=1)
+
+        output = torch.concat()
+
+class CombCircuitWithClauseSAT(CombinationalCircuit):
+    """Combinational Circuit instantiated from a list a PySAT CNF problem.
+    Now attempts to find a satisfying assignment for each clause (PoS form)
+    """
+
+    def __init__(self, **kwargs):
+        # read cnf file
+        assert kwargs["cnf_problem"] is not None
+        self.cnf_problem = kwargs["cnf_problem"]
+        self.use_pgates = kwargs["use_pgates"]
+
+        # define input shape
+        # for SAT problems, input is a single k-bit vector
+        # where k is the number of variables in the problem
+        self.input_shape = [self.cnf_problem.nv]
+
+        # generate input embedding layer
+        super().__init__(**kwargs)
+
+        self.clause_list = self.cnf_problem.clauses
+
+        self.max_clause_len = max([len(clause) for clause in self.clause_list])
+        # padded_clause_list = [clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]
+        self.flat_var_list = np.array([clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]).flatten().tolist()
+        # self.flat_var_list = [v for v in c for c in [clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]]
+        self.var_tensor = torch.LongTensor(self.flat_var_list).to(self.device)
+        self.var_negation_tensor = torch.LongTensor([0 if v >= 0 else 1 for v in self.flat_var_list]).to(self.device)
+        # self.clause_start_idx = torch.cumsum(
+        #     torch.LongTensor([0] + [len(clause) for clause in self.clause_list]), dim=0
+        # )[:-1]
+
+        # generate intermediate layers
+        # self.intermediate_layers = nn.ModuleList(
+        #     [
+        #         # pgates.OR() if self.use_pgates else gates.OR()
+        #         pOR() for i in range(len(self.cnf_problem.clauses))
+        #     ]
+        # )
+        # package all layers into a dictionary
+        self.layers = {
+            "emb": self.input_embedding,
+            # "intermediate": self.intermediate_layers,
+        }
+
+
+    def forward(self, input):
+        x = self.layers["emb"](input)
+        x = torch.concat((torch.zeros(x.shape[0], 1).to(x.device), x), dim=1)
+        gather_x = torch.index_select(x, -1, torch.abs(self.var_tensor))
+        gather_x = torch.concat((gather_x.unsqueeze(-1), 1-gather_x.unsqueeze(-1)), dim=-1)
+        gather_x = torch.gather(gather_x, x.dim(), self.var_negation_tensor.unsqueeze(0).unsqueeze(-1)).squeeze(-1)
+        reshaped_x = torch.reshape(gather_x, (x.shape[0], -1, self.max_clause_len))
+        output = 1 - torch.prod(1-reshaped_x, dim=-1)
+
+        # negated_x = torch.mul(gather_x, self.var_negation_tensor)
+        # split_gathered = torch.split(negated_x, self.max_clause_len, dim=1)
+
+        # gather_x = torch.index_select(x, 1, self.flat_var_tensor)
+        # split_gathered = torch.split(gather_x, self.clause_start_idx.tolist()[1:], dim=0)
+
+        # intermediate_out = torch.zeros(
+        #     input.shape[0], len(self.cnf_problem.clauses)
+        # ).to(input.device)
+        # for i in range(len(self.cnf_problem.clauses)):
+        #     idx = [ abs(x)-1 for x in self.cnf_problem.clauses[i] ]
+        #     y = torch.where(torch.FloatTensor(self.cnf_problem.clauses[i]).to(x.device) > 0., x[:,idx], 1. - x[:,idx])
+        #     intermediate_out[:, i] = self.layers["intermediate"][i](y)
+        # for i in range(len(self.cnf_problem.clauses)):
+        #     idx = [abs(x) - 1 for x in self.cnf_problem.clauses[i]]
+        #     y = torch.where(
+        #         torch.FloatTensor(self.cnf_problem.clauses[i]).to(x.device) > 0.0,
+        #         x[:, idx],
+        #         1.0 - x[:, idx],
+        #     )
+        #     intermediate_out[:, i] = self.layers["intermediate"][i](y)
+        
+        return output

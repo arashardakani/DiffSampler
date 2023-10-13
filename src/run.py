@@ -22,7 +22,8 @@ class Runner(object):
     def __init__(self, problem_type: str = "sat"):
         self.args = flags.parse_args()
         self.problem_type = problem_type
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        #self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = 'cpu'
         if self.args.verbose:
             logging.basicConfig(level=logging.INFO)
             logging.info(f"Args: {self.problem_type} on {self.device}")
@@ -38,7 +39,12 @@ class Runner(object):
         self.solution_found = False
         self.baseline = None
         self.save_dir = pathlib.Path(__file__).parent.parent / "results"
-        self.dataset_path = os.path.join(pathlib.Path(__file__).parent.parent, self.args.dataset_path)
+        self.dataset_str = ""
+
+        torch.manual_seed(self.args.seed)
+        np.random.seed(self.args.seed)
+        random.seed(self.args.seed)
+
         self._setup_problems()
 
     def _setup_problems(self):
@@ -52,9 +58,12 @@ class Runner(object):
                 datasets = range(4, 12)
                 self.problems = [PHP(nof_holes=n) for n in datasets]
                 datasets = [f"PHP_{n}" for n in datasets]
+                self.dataset_str = "php_4_12"
             else:
-                datasets = sorted(glob.glob(self.dataset_path))
+                dataset_path = os.path.join(pathlib.Path(__file__).parent.parent, self.args.dataset_path)
+                datasets = sorted(glob.glob(dataset_path))
                 self.problems = [CNF(from_file=path) for path in datasets]
+                self.dataset_str = self.args.dataset_path.split('/')[1]
             self.baseline = BaselineSolverRunner(cnf_problems=self.problems)
             self.baseline_prover = BaselineSolverRunner(
                 cnf_problems=self.problems, solver_name="lingeling"
@@ -62,7 +71,9 @@ class Runner(object):
             self.results = {
                 i: {"prob_desc": datasets[i].split('/')[-1]} for i in range(len(self.problems))
             }
-            logging.info(f"Dataset used: {datasets}")
+            logging.info(f"Dataset used: {self.dataset_str}")
+            # print(self.dataset_str)
+            # import pdb; pdb.set_trace()
         else:
             raise NotImplementedError
 
@@ -74,22 +85,35 @@ class Runner(object):
         Args:
             prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
         """
+        
+
         if self.problem_type == "sat":
-            self.model = circuit.CombinationalCircuit(
+            # self.model = circuit.CombinationalCircuit(
+            #     cnf_problem=self.problems[prob_id],
+            #     use_pgates=self.args.use_pgates,
+            #     batch_size=self.args.batch_size,
+            #     device=self.device,
+            # )
+            self.model = circuit.CombCircuitWithClauseSAT(
                 cnf_problem=self.problems[prob_id],
                 use_pgates=self.args.use_pgates,
                 batch_size=self.args.batch_size,
                 device=self.device,
             )
             self.input = torch.LongTensor(range(self.args.batch_size)).to(self.device)  # batch size 1
-            self.target = torch.ones(1, requires_grad=False, device=self.device)
-            # self.solution_prob_func = lambda x: (
-            #     1.0 - torch.round(x * 256.0) / 256.0
-            # ).item()
+            # self.target = torch.ones(1, requires_grad=False, device=self.device)
+            self.target = torch.ones(self.args.batch_size, len(self.problems[prob_id].clauses), requires_grad=False, device=self.device)
             self.solution_prob_func = lambda loss: (
-                1.0 - torch.round(loss * 16.0) / 16.0
+                1.0 - torch.round(loss * 32.) / 32.
             ).item()
-            self.loss = BCELoss()
+            if self.args.loss_fn == "mse":
+                self.loss = MSELoss(reduction='sum')
+            elif self.args.loss_fn == "ce":
+                self.loss = CrossEntropyLoss()
+            elif self.args.loss_fn == "bce":
+                self.loss = BCELoss(reduction='sum')
+            else:
+                raise NotImplementedError
             # self.loss = torch.nn.CrossEntropyLoss()
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.args.learning_rate
@@ -102,9 +126,7 @@ class Runner(object):
         self.target.to(self.device)
         self.solution_found = False
 
-        torch.manual_seed(self.args.seed)
-        np.random.seed(self.args.seed)
-        random.seed(self.args.seed)
+        
 
     def _check_complete(self, epoch: int, loss: torch.Tensor):
         """Check if the solution has been found.
@@ -217,7 +239,9 @@ class Runner(object):
     def export_results(self):
         """Export results to a file."""
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = os.path.join(self.save_dir, f"{self.problem_type}_{self.args.dataset_path.split('/')[1]}_{self.args.num_epochs}_{self.args.learning_rate}_{self.args.batch_size}.txt")
+        filename = f"{self.problem_type}_{self.dataset_str}"
+        filename += f"_{self.args.loss_fn}_{self.args.learning_rate}_{self.args.batch_size}.txt"
+        filename = os.path.join(self.save_dir, filename)
         df = pd.DataFrame.from_dict(self.results)
         df = df.transpose()
         df.to_csv(filename, sep="\t", index=False)

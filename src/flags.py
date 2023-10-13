@@ -34,6 +34,9 @@ def parse_args():
     parser.add_argument(
         "--batch_size", type=int, default=1, help="Batch size per GPU/CPU for training."
     )
+    parser.add_argument(
+        "--loss_fn", type=str, default="mse", help="Which loss function to use"
+    )
 
     # util parameters
     parser.add_argument(
