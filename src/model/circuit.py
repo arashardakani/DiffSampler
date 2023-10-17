@@ -71,6 +71,10 @@ class PIEmbedding(nn.Module):
         )
         self.activation = torch.nn.Sigmoid()  # if use_pgates else Sgn()
 
+        # initialize embeddings
+        for emb in self.embeddings:
+            emb.weight.data = torch.rand(emb.weight.data.shape)
+
     def forward(self, input: torch.Tensor):
         x = torch.cat([emb(input) for emb in self.embeddings], dim=1)
         out = self.activation(x)
@@ -82,65 +86,49 @@ class PIEmbedding(nn.Module):
         return weights
 
 
-class CombinationalCircuit(BaseCircuit):
-    """Combinational Circuit instantiated from a list a PySAT CNF problem"""
+class CNF2Circuit(BaseCircuit):
+    """Combinational Circuit instantiated from a PySAT CNF problem"""
 
-    def __init__(self, cnf_problem: CNF = None, **kwargs):
+    def __init__(self, **kwargs):
         # read cnf file
-        assert cnf_problem is not None
-        self.cnf_problem = cnf_problem
+        assert kwargs["cnf_problem"] is not None
+        self.cnf_problem = kwargs["cnf_problem"]
         self.use_pgates = kwargs["use_pgates"]
 
         # define input shape
         # for SAT problems, input is a single k-bit vector
         # where k is the number of variables in the problem
-        self.input_shape = [cnf_problem.nv]
+        self.input_shape = [self.cnf_problem.nv]
 
         # generate input embedding layer
         super().__init__(input_shape=self.input_shape, **kwargs)
 
-        # generate intermediate layers
-        self.intermediate_layers = nn.ModuleList(
-            [
-                # pgates.OR() if self.use_pgates else gates.OR()
-                pOR() for i in range(len(cnf_problem.clauses))
-            ]
-        )
-        # generate final AND gate (PoS form)
-        self.and_gate = pAND()
+        self.clause_list = self.cnf_problem.clauses
+        self.max_clause_len = max([len(clause) for clause in self.clause_list])
+        self.flat_var_list = np.array([clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]).flatten().tolist()
+        self.var_tensor = torch.LongTensor(self.flat_var_list).to(self.device)
+        self.var_negation_tensor = torch.LongTensor([0 if v >= 0 else 1 for v in self.flat_var_list]).to(self.device)
         # package all layers into a dictionary
-        self.build_model(**kwargs)
-
-    def build_model(self, **kwargs):
-        """Package layers into a dictionary"""
         self.layers = {
             "emb": self.input_embedding,
-            "intermediate": self.intermediate_layers,
-            "and": self.and_gate,
         }
 
     def forward(self, input):
+        # batchsize is x.shape[0]
         x = self.layers["emb"](input)
-        intermediate_out = torch.zeros(
-            input.size()[0], len(self.cnf_problem.clauses)
-        ).to(input.device)
-        for i in range(len(self.cnf_problem.clauses)):
-            idx = [abs(x) - 1 for x in self.cnf_problem.clauses[i]]
-            y = torch.where(
-                torch.FloatTensor(self.cnf_problem.clauses[i]).to(x.device) > 0.0,
-                x[:, idx],
-                1.0 - x[:, idx],
-            )
-            intermediate_out[:, i] = self.layers["intermediate"][i](y)
-        out = self.layers["and"](intermediate_out)
-        return out
+        x = torch.concat((torch.zeros(x.shape[0], 1).to(x.device), x), dim=1)
+        gather_x = torch.index_select(x, -1, torch.abs(self.var_tensor))
+        gather_x = torch.concat((gather_x.unsqueeze(-1), 1-gather_x.unsqueeze(-1)), dim=-1)
+        gather_x = torch.gather(gather_x, x.dim(), self.var_negation_tensor.repeat((x.shape[0], 1)).unsqueeze(-1)).squeeze(-1)
+        reshaped_x = torch.reshape(gather_x, (x.shape[0], -1, self.max_clause_len))
+        output = 1 - torch.prod(1-reshaped_x, dim=-1)
+        return output
 
-    def get_input_weights(self):
+    def get_input_weights(self, idx=0):
         """Get weights of the input embedding layer"""
         assert self.layers["emb"] is not None
-        assert len(self.layers["emb"].embeddings) == 1
-        weights = self.layers["emb"].get_weights()[0]
+        weights = self.layers["emb"].get_weights()[0][idx]
         if self.use_pgates:
-            return ((torch.sign(weights) + 1.0) / 2.0).long().cpu().tolist()[0]
+            return ((torch.sign(weights) + 1.0) / 2.0).long().cpu().tolist()
         else:
             raise NotImplementedError

@@ -8,8 +8,10 @@ import numpy as np
 import pandas as pd
 from pysat.formula import CNF
 from pysat.examples.genhard import PHP
+from pysat.solvers import Solver
+
 import torch
-from torch.nn import CrossEntropyLoss, MSELoss, BCELoss
+from torch.nn import CrossEntropyLoss, MSELoss, BCELoss, KLDivLoss
 from tqdm import tqdm
 
 import flags
@@ -23,6 +25,7 @@ class Runner(object):
         self.args = flags.parse_args()
         self.problem_type = problem_type
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # self.device = 'cpu'
         if self.args.verbose:
             logging.basicConfig(level=logging.INFO)
             logging.info(f"Args: {self.problem_type} on {self.device}")
@@ -31,14 +34,16 @@ class Runner(object):
             )
         else:
             logging.basicConfig(level=logging.ERROR)
-
+        torch.manual_seed(self.args.seed)
+        np.random.seed(self.args.seed)
+        random.seed(self.args.seed)
         self.model = None
         self.loss = None
         self.optimizer = None
-        self.solution_found = False
         self.baseline = None
         self.save_dir = pathlib.Path(__file__).parent.parent / "results"
-        self.dataset_path = os.path.join(pathlib.Path(__file__).parent.parent, self.args.dataset_path)
+        self.datasets = []
+        self.dataset_str = ""
         self._setup_problems()
 
     def _setup_problems(self):
@@ -49,20 +54,17 @@ class Runner(object):
         if self.problem_type == "sat":
             if self.args.dataset_path is None:
                 logging.info("No dataset found. Generating PySAT PHP problems.")
-                datasets = range(4, 12)
-                self.problems = [PHP(nof_holes=n) for n in datasets]
-                datasets = [f"PHP_{n}" for n in datasets]
+                self.datasets = range(4, 12)
+                self.problems = [PHP(nof_holes=n) for n in  self.datasets]
+                self.datasets = [f"PHP_{n}" for n in self.datasets]
+                self.dataset_str = "php_4_12"
             else:
-                datasets = sorted(glob.glob(self.dataset_path))
-                self.problems = [CNF(from_file=path) for path in datasets]
-            self.baseline = BaselineSolverRunner(cnf_problems=self.problems)
-            self.baseline_prover = BaselineSolverRunner(
-                cnf_problems=self.problems, solver_name="lingeling"
-            )
-            self.results = {
-                i: {"prob_desc": datasets[i].split('/')[-1]} for i in range(len(self.problems))
-            }
-            logging.info(f"Dataset used: {datasets}")
+                dataset_path = os.path.join(pathlib.Path(__file__).parent.parent, self.args.dataset_path)
+                self.datasets = sorted(glob.glob(dataset_path))
+                self.problems = None
+                self.dataset_str = self.args.dataset_path.split('/')[1]
+            self.results={}
+            logging.info(f"Dataset used: {self.dataset_str}")
         else:
             raise NotImplementedError
 
@@ -74,150 +76,218 @@ class Runner(object):
         Args:
             prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
         """
+
         if self.problem_type == "sat":
-            self.model = circuit.CombinationalCircuit(
-                cnf_problem=self.problems[prob_id],
+            if not self.problems:
+                logging.info(f"Loading problem from {self.datasets[prob_id]}")
+                problem = CNF(from_file=self.datasets[prob_id])
+            else:
+                problem = self.problems[prob_id]
+            logging.info("Building model")
+            self.model = circuit.CNF2Circuit(
+                cnf_problem=problem,
                 use_pgates=self.args.use_pgates,
                 batch_size=self.args.batch_size,
                 device=self.device,
             )
-            self.input = torch.LongTensor(range(self.args.batch_size)).to(self.device)  # batch size 1
-            self.target = torch.ones(1, requires_grad=False, device=self.device)
-            # self.solution_prob_func = lambda x: (
-            #     1.0 - torch.round(x * 256.0) / 256.0
-            # ).item()
-            self.solution_prob_func = lambda loss: (
-                1.0 - torch.round(loss * 16.0) / 16.0
-            ).item()
-            self.loss = BCELoss()
-            # self.loss = torch.nn.CrossEntropyLoss()
-            self.optimizer = torch.optim.Adam(
-                self.model.parameters(), lr=self.args.learning_rate
+            self.input = torch.LongTensor(range(self.args.batch_size)).to(self.device)
+            self.target = torch.ones(self.args.batch_size, len(problem.clauses), requires_grad=False, device=self.device)
+            if self.args.loss_fn == "mse":
+                self.loss = MSELoss(reduction='mean')
+                self.loss_per_batch = MSELoss(reduction='none')
+            elif self.args.loss_fn == "bce":
+                self.loss = BCELoss(reduction='mean')
+                self.loss_per_batch = BCELoss(reduction='none')
+            elif self.args.loss_fn == "ce":
+                self.loss = CrossEntropyLoss(reduction='mean')
+                self.loss_per_batch = CrossEntropyLoss(reduction='none')
+            elif self.args.loss_fn == "kl":
+                self.loss = KLDivLoss(reduction='mean')
+                self.loss_per_batch = KLDivLoss(reduction='none')
+            else:
+                raise NotImplementedError
+            # self.optimizer = torch.optim.Adam(
+            #     self.model.parameters(), lr=self.args.learning_rate
+            # )
+            self.optimizer = torch.optim.AdamW(
+                self.model.parameters(), lr=self.args.learning_rate,
+                weight_decay=2e-6
             )
+            self.results[prob_id] = {
+                "prob_desc": self.datasets[prob_id].split('/')[-1],
+                "num_vars": problem.nv,
+                "num_clauses": len(problem.clauses),
+            }
+            logging.info(f"num_vars: {problem.nv}")
+            logging.info(f"num_clauses: {len(problem.clauses)}")
         else:
             raise NotImplementedError
 
         self.model.to(self.device)
         self.input.to(self.device)
         self.target.to(self.device)
-        self.solution_found = False
+        self.epochs_ran = 0
 
-        torch.manual_seed(self.args.seed)
-        np.random.seed(self.args.seed)
-        random.seed(self.args.seed)
 
-    def _check_complete(self, epoch: int, loss: torch.Tensor):
-        """Check if the solution has been found.
-        Used for early stopping backpropagation (grad descent) if the solution has been found.
-        """
-        current_solution_prob = self.solution_prob_func(loss)
-        # logging.info('Loss @ epoch %d: %f', epoch, loss)
-        # logging.info('Probability of getting 1 as the output @ epoch %d: %f', epoch, current_solution_prob)
-        if current_solution_prob == 1.0:
-            self.solution_found = True
-            return True
+    def run_back_prop_with_early_exit(self, train_loop: range):
+        """Run backpropagation for the given number of epochs."""
+        target = self.target.to(self.device)
+        for epoch in train_loop:
+            outputs = self.model(self.input)
+            loss = self.loss(outputs, target)
+            loss_per_batch = self.loss_per_batch(outputs, target)
+            # logging.info(f"Epoch {epoch}: loss = {loss:.6f}")
+            if torch.any(torch.all(loss_per_batch < 1e-3, dim=1)):
+                # logging.info(f"Early exit at epoch {epoch}")
+                return loss_per_batch
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            self.model.train()
+        return loss_per_batch
+
 
     def run_back_prop(self, train_loop: range):
         """Run backpropagation for the given number of epochs."""
+        target = self.target
         for epoch in train_loop:
-            self.model.train()
-            self.optimizer.zero_grad()
             outputs = self.model(self.input)
-            l = self.loss(outputs, self.target)
-            if self._check_complete(loss=l, epoch=epoch):
-                break
-            l.backward()
+            loss = self.loss(outputs, target).to(self.device)
+            self.optimizer.zero_grad()
+            loss.backward()
             self.optimizer.step()
-        return epoch
+            self.model.train()
+        return self.loss_per_batch(outputs, self.target)
 
-    def run(self, prob_id: int = 0):
-        """Run the experiment."""
-        self._initialize_model(prob_id=prob_id)
+    def run_baseline(self, problem: CNF, prob_id: int = 0):
+        """Run the baseline solver.
+
+        Args:
+            problem: CNF problem to be solved
+            prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
+        """
+        if 'comp' in self.dataset_str:
+            solver_name = "cd153"
+        else:
+            solver_name = "m22"
+        self.baseline = BaselineSolverRunner(cnf_problems=problem, solver_name=solver_name)
+        baseline_elapsed_time, result = self.baseline.run()
+        logging.info("--------------------")
+        logging.info(f"Baseline Solver: {solver_name}")
+        logging.info(f"Baseline Elapsed Time: {baseline_elapsed_time:.6f} seconds.")
+        logging.info(f"Result: {result}")
+        self.results[prob_id].update(
+            {
+                "baseline_runtime": baseline_elapsed_time,
+                "baseline_result": result,
+            }
+        )
+        if self.args.dump_solution:
+            self.results[prob_id].update({"baseline_core": self.baseline.solver.get_core()})
+
+        solver_solution = self.baseline.solver.get_model()
+        self.baseline.solver.delete()
+        return solver_solution
+    
+    def _check_solution(self, problem: CNF, assignment: dict[int: int]):
+        return all([any([assignment[abs(i)]*i > 0 for i in clause]) for clause in problem.clauses])
+
+    
+    def verify_solution(self, problem: CNF, solutions: list[list[int]]):
+        """Verify the solutions found by model
+        Args:
+            problem: CNF problem to be solved
+            solutions: list of solutions found by model
+        """
+        is_verified = False
+        for i, solution in tqdm(enumerate(solutions), total=len(solutions)):
+            assignment = {i+1: solution[i] for i in range(len(solution))}
+            is_verified = self._check_solution(problem, assignment)
+            # verifier = Solver(name='lgl', bootstrap_with=problem)
+            # for assignment in solution:
+            #     verifier.add_clause([assignment])
+            # is_verified = verifier.solve()
+            if is_verified:
+                logging.info("Model solution verified")
+                break
+            # verifier.delete()
+        if not is_verified:
+            logging.info("No solution found")
+        return is_verified
+    
+    def run_model(self, problem: CNF, prob_id: int = 0):
+        solutions_found = []
         if self.args.latency_experiment:
             train_loop = range(self.args.num_epochs)
-            elapsed_time, epochs_ran = timer(self.run_back_prop)(train_loop)
+            if self.args.early_exit:
+                elapsed_time, losses = timer(self.run_back_prop_with_early_exit)(train_loop)
+            else:
+                elapsed_time, losses = timer(self.run_back_prop)(train_loop)
             logging.info("--------------------")
             logging.info("NN model solving")
             logging.info(
-                f"Elapsed Time: {elapsed_time:.6f} seconds; stopped at epoch: {epochs_ran}."
+                f"Elapsed Time: {elapsed_time:.6f} seconds"
             )
-            logging.info("--------------------")
         else:
             train_loop = (
                 range(self.args.num_epochs)
                 if self.args.verbose
                 else tqdm(range(self.args.num_epochs))
             )
-            epochs_ran = self.run_back_prop(train_loop)
-        if self.solution_found:
-            logging.info("Solution:"+"-".join([str(w) for w in self.model.get_input_weights()]))
-        else:
-            logging.info("No solution found.")
+            losses = self.run_back_prop(train_loop)
+        if self.args.loss_fn != 'ce':
+            losses = torch.mean(losses, dim=1)
+        solutions  = torch.topk(1-losses, k=self.args.topk, dim=0).indices.tolist()
+        solutions_found = [self.model.get_input_weights(s) for s in solutions]
+        solutions_found = [[(-1)**(1-sol[i]) * (i+1) for i in range(len(sol))] for sol in solutions_found]
         self.results[prob_id].update(
             {
                 "model_runtime": elapsed_time,
-                "model_result": self.solution_found,
-                "model_solution": self.model.get_input_weights(),
+                # "model_epochs_ran": self.epochs_ran,
             }
         )
+        return solutions_found
 
-    def run_baseline(self, prob_id: int = 0):
-        """Run the baseline solver.
+    def run(self, prob_id: int = 0):
+        """Run the experiment."""
+        self._initialize_model(prob_id=prob_id)
+        problem = CNF(from_file=self.datasets[prob_id])
+        # run NN model solving
+        solutions_found = self.run_model(problem, prob_id)
 
-        Args:
-            prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
-        """
-        self.baseline._setup_problem(prob_id=prob_id)
-        elapsed_time, result = self.baseline.run()
-        logging.info("--------------------")
-        logging.info("Baseline Solver: MiniSAT")
-        logging.info(f"Elapsed Time: {elapsed_time:.6f} seconds.")
-        logging.info(f"Result: {result}")
-        if not result:
-            logging.info(f"unsat core: {self.baseline.solver.get_core()}")
+       
+        # solver_solution = self.run_baseline(problem, prob_id)
+        # is_verified = any([sol == solver_solution for sol in solutions_found])
+        # if not is_verified:
+        #     is_verified = self.verify_solution(problem, solutions_found)
+        is_verified = self.verify_solution(problem, solutions_found)
         self.results[prob_id].update(
             {
-                "baseline_runtime": elapsed_time,
-                "baseline_result": result,
-                "baseline_core": self.baseline.solver.get_core(),
+                "model_result": is_verified,
             }
         )
-        logging.info("--------------------")
-        if self.args.verify_solution:
-            self.baseline_prover._setup_problem(prob_id=prob_id)
-            elapsed_time, result = self.baseline_prover.run()
-            logging.info("--------------------")
-            logging.info("Baseline Solver: Lingeling")
-            logging.info(f"Result: {result}")
-            if not result:
-                logging.info(f"Proof: {self.baseline_prover.solver.get_proof() is not None}")
-            logging.info("--------------------")
-            self.results[prob_id].update(
-                {
-                    "baseline_prover_runtime": elapsed_time,
-                    "baseline_prover_result": result,
-                    "baseline_prover_proof": self.baseline_prover.solver.get_proof(),
-                }
-            )
+        # run baseline solver
+        solver_solution = self.run_baseline(problem, prob_id)
+        if self.args.dump_solution:
+            self.results[prob_id].update({"model_solution": self.model.get_input_weights(solutions_found[i])})
+        
+        logging.info("--------------------\n")
+        
 
     def run_all_with_baseline(self):
         """Run all the problems in the dataset given as argument to the Runner."""
-        assert self.args.latency_experiment
-        for prob_id in range(len(self.problems)):
-            self.results[prob_id].update(
-                {
-                    "num_vars": self.problems[prob_id].nv,
-                    "num_clauses": len(self.problems[prob_id].clauses),
-                }
-            )
+        for prob_id in range(len(self.datasets)):
             self.run(prob_id=prob_id)
-            self.run_baseline(prob_id=prob_id)
-        self.export_results()
+        if self.args.latency_experiment:
+            self.export_results()
 
     def export_results(self):
         """Export results to a file."""
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = os.path.join(self.save_dir, f"{self.problem_type}_{self.args.dataset_path.split('/')[1]}_{self.args.num_epochs}_{self.args.learning_rate}_{self.args.batch_size}.txt")
+        filename = f"{self.problem_type}_{self.dataset_str}_{self.args.num_epochs}"
+        filename += "_early_exit" if self.args.early_exit else ""
+        filename += f"_{self.args.loss_fn}_{self.args.learning_rate}_{self.args.batch_size}_{self.args.topk}.csv"
+        filename = os.path.join(self.save_dir, filename)
         df = pd.DataFrame.from_dict(self.results)
         df = df.transpose()
         df.to_csv(filename, sep="\t", index=False)
