@@ -157,6 +157,8 @@ class Runner(object):
             loss.backward()
             self.optimizer.step()
             self.model.train()
+            logging.info(f"Epoch {epoch}: loss = {loss:.6f}")
+            logging.info(f"Weights: {self.model.layers['emb'].get_weights()[0][0]}")
         return self.loss_per_batch(outputs, self.target)
 
     def run_baseline(self, problem: CNF, prob_id: int = 0):

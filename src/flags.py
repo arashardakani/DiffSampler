@@ -7,7 +7,7 @@ def parse_args():
     )
     # Problem parameters
     parser.add_argument(
-        "--dataset_path",
+        "--dataset_path","-d",
         type=str,
         help="Path to dataset",
     )
@@ -20,7 +20,7 @@ def parse_args():
 
     # train(backprop) parameters
     parser.add_argument(
-        "--learning_rate",
+        "--learning_rate", "--lr",
         type=float,
         default=10e-1,
         help="Initial learning rate (after the potential warmup period) to use.",
@@ -28,28 +28,22 @@ def parse_args():
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=100,
+        default=1000,
         help="Total number of training epochs to perform.",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=1, help="Batch size per GPU/CPU for training."
+        "--batch_size", "-b", type=int, default=1, help="Batch size per GPU/CPU for training."
     )
+    
     parser.add_argument(
-        "--topk", type=int, default=10, help="Top k predictions to consider"
-    )
-    parser.add_argument(
-        "--loss_fn", type=str, default="mse", help="Which loss function to use"
-    )
-    parser.add_argument(
-        "--early_exit", "-e", action="store_true", help="Whether to use early exit"
+        "--loss_fn", type=str, default="sigmoid_binary_cross_entropy", help="what mode of probability modeling to use"
     )
 
     # util parameters
     parser.add_argument(
-        "--verbose",
-        "-v",
+        "--use_cpu",
         action="store_true",
-        help="Whether to print training logs or not",
+        help="Whether touse cpu",
     )
     parser.add_argument(
         "--latency_experiment",
