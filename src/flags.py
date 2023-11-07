@@ -7,7 +7,8 @@ def parse_args():
     )
     # Problem parameters
     parser.add_argument(
-        "--dataset_path","-d",
+        "--dataset_path",
+        "-d",
         type=str,
         help="Path to dataset",
     )
@@ -20,25 +21,35 @@ def parse_args():
 
     # train(backprop) parameters
     parser.add_argument(
-        "--learning_rate", "--lr",
+        "--learning_rate",
+        "--lr",
         type=float,
         default=10e-1,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
-        "--num_epochs",
+        "--num_steps",
         type=int,
         default=1000,
-        help="Total number of training epochs to perform.",
+        help="Total number of gradient descent steps to perform.",
     )
     parser.add_argument(
-        "--batch_size", "-b", type=int, default=1, help="Batch size per GPU/CPU for training."
-    )
-    
-    parser.add_argument(
-        "--loss_fn", type=str, default="sigmoid_binary_cross_entropy", help="what mode of probability modeling to use"
+        "--batch_size",
+        "-b",
+        type=int,
+        default=1,
+        help="Batch size per GPU/CPU for training.",
     )
 
+    parser.add_argument(
+        "--loss_fn",
+        type=str,
+        default="sigmoid_binary_cross_entropy",
+        help="what loss function to use",
+    )
+    parser.add_argument(
+        "--optimizer", type=str, default="adam", help="what optimizer to use"
+    )
     # util parameters
     parser.add_argument(
         "--use_cpu",
@@ -56,6 +67,24 @@ def parse_args():
         action="store_true",
         help="Whether to dump solution or not",
     )
+    # Wandb parameters
+    parser.add_argument(
+        "--wandb_entity", type=str, default=None, help="wandb entity (id) name"
+    )
+    parser.add_argument(
+        "--wandb_project", type=str, default=None, help="wandb project name"
+    )
+    parser.add_argument("--wandb_name", type=str, default=None, help="wandb run name")
+    parser.add_argument(
+        "--wandb_group", type=str, default=None, help="wandb run group name"
+    )
+    parser.add_argument(
+        "--wandb_job_type", type=str, default=None, help="wandb job type descrption"
+    )
+    parser.add_argument(
+        "--wandb_tags", type=str, default=None, help="wandb tags, comma separated"
+    )
+
     args = parser.parse_args()
 
     return args

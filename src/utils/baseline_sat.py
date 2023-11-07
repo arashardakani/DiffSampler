@@ -7,6 +7,7 @@ from utils.latency import timer
 
 class BaselineSolverRunner(object):
     """Baseline SAT solver runner."""
+
     def __init__(self, cnf_problems: list[CNF], solver_name: str = "m22"):
         self.cnf_problems = cnf_problems
         self.solver_name = solver_name

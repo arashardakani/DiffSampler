@@ -105,9 +105,20 @@ class CNF2Circuit(BaseCircuit):
 
         self.clause_list = self.cnf_problem.clauses
         self.max_clause_len = max([len(clause) for clause in self.clause_list])
-        self.flat_var_list = np.array([clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]).flatten().tolist()
+        self.flat_var_list = (
+            np.array(
+                [
+                    clause + [0] * (self.max_clause_len - len(clause))
+                    for clause in self.clause_list
+                ]
+            )
+            .flatten()
+            .tolist()
+        )
         self.var_tensor = torch.LongTensor(self.flat_var_list).to(self.device)
-        self.var_negation_tensor = torch.LongTensor([0 if v >= 0 else 1 for v in self.flat_var_list]).to(self.device)
+        self.var_negation_tensor = torch.LongTensor(
+            [0 if v >= 0 else 1 for v in self.flat_var_list]
+        ).to(self.device)
         # package all layers into a dictionary
         self.layers = {
             "emb": self.input_embedding,
@@ -118,10 +129,16 @@ class CNF2Circuit(BaseCircuit):
         x = self.layers["emb"](input)
         x = torch.concat((torch.zeros(x.shape[0], 1).to(x.device), x), dim=1)
         gather_x = torch.index_select(x, -1, torch.abs(self.var_tensor))
-        gather_x = torch.concat((gather_x.unsqueeze(-1), 1-gather_x.unsqueeze(-1)), dim=-1)
-        gather_x = torch.gather(gather_x, x.dim(), self.var_negation_tensor.repeat((x.shape[0], 1)).unsqueeze(-1)).squeeze(-1)
+        gather_x = torch.concat(
+            (gather_x.unsqueeze(-1), 1 - gather_x.unsqueeze(-1)), dim=-1
+        )
+        gather_x = torch.gather(
+            gather_x,
+            x.dim(),
+            self.var_negation_tensor.repeat((x.shape[0], 1)).unsqueeze(-1),
+        ).squeeze(-1)
         reshaped_x = torch.reshape(gather_x, (x.shape[0], -1, self.max_clause_len))
-        output = 1 - torch.prod(1-reshaped_x, dim=-1)
+        output = 1 - torch.prod(1 - reshaped_x, dim=-1)
         return output
 
     def get_input_weights(self, idx=0):

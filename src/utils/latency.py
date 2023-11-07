@@ -3,6 +3,7 @@ import time
 
 def timer(func):
     """Time the execution of a function."""
+
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)

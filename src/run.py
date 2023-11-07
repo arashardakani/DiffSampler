@@ -24,7 +24,7 @@ class Runner(object):
     def __init__(self, problem_type: str = "sat"):
         self.args = flags.parse_args()
         self.problem_type = problem_type
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # self.device = 'cpu'
         if self.args.verbose:
             logging.basicConfig(level=logging.INFO)
@@ -55,15 +55,17 @@ class Runner(object):
             if self.args.dataset_path is None:
                 logging.info("No dataset found. Generating PySAT PHP problems.")
                 self.datasets = range(4, 12)
-                self.problems = [PHP(nof_holes=n) for n in  self.datasets]
+                self.problems = [PHP(nof_holes=n) for n in self.datasets]
                 self.datasets = [f"PHP_{n}" for n in self.datasets]
                 self.dataset_str = "php_4_12"
             else:
-                dataset_path = os.path.join(pathlib.Path(__file__).parent.parent, self.args.dataset_path)
+                dataset_path = os.path.join(
+                    pathlib.Path(__file__).parent.parent, self.args.dataset_path
+                )
                 self.datasets = sorted(glob.glob(dataset_path))
                 self.problems = None
-                self.dataset_str = self.args.dataset_path.split('/')[1]
-            self.results={}
+                self.dataset_str = self.args.dataset_path.split("/")[1]
+            self.results = {}
             logging.info(f"Dataset used: {self.dataset_str}")
         else:
             raise NotImplementedError
@@ -91,30 +93,34 @@ class Runner(object):
                 device=self.device,
             )
             self.input = torch.LongTensor(range(self.args.batch_size)).to(self.device)
-            self.target = torch.ones(self.args.batch_size, len(problem.clauses), requires_grad=False, device=self.device)
+            self.target = torch.ones(
+                self.args.batch_size,
+                len(problem.clauses),
+                requires_grad=False,
+                device=self.device,
+            )
             if self.args.loss_fn == "mse":
-                self.loss = MSELoss(reduction='mean')
-                self.loss_per_batch = MSELoss(reduction='none')
+                self.loss = MSELoss(reduction="mean")
+                self.loss_per_batch = MSELoss(reduction="none")
             elif self.args.loss_fn == "bce":
-                self.loss = BCELoss(reduction='mean')
-                self.loss_per_batch = BCELoss(reduction='none')
+                self.loss = BCELoss(reduction="mean")
+                self.loss_per_batch = BCELoss(reduction="none")
             elif self.args.loss_fn == "ce":
-                self.loss = CrossEntropyLoss(reduction='mean')
-                self.loss_per_batch = CrossEntropyLoss(reduction='none')
+                self.loss = CrossEntropyLoss(reduction="mean")
+                self.loss_per_batch = CrossEntropyLoss(reduction="none")
             elif self.args.loss_fn == "kl":
-                self.loss = KLDivLoss(reduction='mean')
-                self.loss_per_batch = KLDivLoss(reduction='none')
+                self.loss = KLDivLoss(reduction="mean")
+                self.loss_per_batch = KLDivLoss(reduction="none")
             else:
                 raise NotImplementedError
             # self.optimizer = torch.optim.Adam(
             #     self.model.parameters(), lr=self.args.learning_rate
             # )
             self.optimizer = torch.optim.AdamW(
-                self.model.parameters(), lr=self.args.learning_rate,
-                weight_decay=2e-6
+                self.model.parameters(), lr=self.args.learning_rate, weight_decay=2e-6
             )
             self.results[prob_id] = {
-                "prob_desc": self.datasets[prob_id].split('/')[-1],
+                "prob_desc": self.datasets[prob_id].split("/")[-1],
                 "num_vars": problem.nv,
                 "num_clauses": len(problem.clauses),
             }
@@ -127,7 +133,6 @@ class Runner(object):
         self.input.to(self.device)
         self.target.to(self.device)
         self.epochs_ran = 0
-
 
     def run_back_prop_with_early_exit(self, train_loop: range):
         """Run backpropagation for the given number of epochs."""
@@ -145,7 +150,6 @@ class Runner(object):
             self.optimizer.step()
             self.model.train()
         return loss_per_batch
-
 
     def run_back_prop(self, train_loop: range):
         """Run backpropagation for the given number of epochs."""
@@ -168,11 +172,13 @@ class Runner(object):
             problem: CNF problem to be solved
             prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
         """
-        if 'comp' in self.dataset_str:
+        if "comp" in self.dataset_str:
             solver_name = "cd153"
         else:
             solver_name = "m22"
-        self.baseline = BaselineSolverRunner(cnf_problems=problem, solver_name=solver_name)
+        self.baseline = BaselineSolverRunner(
+            cnf_problems=problem, solver_name=solver_name
+        )
         baseline_elapsed_time, result = self.baseline.run()
         logging.info("--------------------")
         logging.info(f"Baseline Solver: {solver_name}")
@@ -185,16 +191,22 @@ class Runner(object):
             }
         )
         if self.args.dump_solution:
-            self.results[prob_id].update({"baseline_core": self.baseline.solver.get_core()})
+            self.results[prob_id].update(
+                {"baseline_core": self.baseline.solver.get_core()}
+            )
 
         solver_solution = self.baseline.solver.get_model()
         self.baseline.solver.delete()
         return solver_solution
-    
-    def _check_solution(self, problem: CNF, assignment: dict[int: int]):
-        return all([any([assignment[abs(i)]*i > 0 for i in clause]) for clause in problem.clauses])
 
-    
+    def _check_solution(self, problem: CNF, assignment: dict[int:int]):
+        return all(
+            [
+                any([assignment[abs(i)] * i > 0 for i in clause])
+                for clause in problem.clauses
+            ]
+        )
+
     def verify_solution(self, problem: CNF, solutions: list[list[int]]):
         """Verify the solutions found by model
         Args:
@@ -203,7 +215,7 @@ class Runner(object):
         """
         is_verified = False
         for i, solution in tqdm(enumerate(solutions), total=len(solutions)):
-            assignment = {i+1: solution[i] for i in range(len(solution))}
+            assignment = {i + 1: solution[i] for i in range(len(solution))}
             is_verified = self._check_solution(problem, assignment)
             # verifier = Solver(name='lgl', bootstrap_with=problem)
             # for assignment in solution:
@@ -216,20 +228,20 @@ class Runner(object):
         if not is_verified:
             logging.info("No solution found")
         return is_verified
-    
+
     def run_model(self, problem: CNF, prob_id: int = 0):
         solutions_found = []
         if self.args.latency_experiment:
             train_loop = range(self.args.num_epochs)
             if self.args.early_exit:
-                elapsed_time, losses = timer(self.run_back_prop_with_early_exit)(train_loop)
+                elapsed_time, losses = timer(self.run_back_prop_with_early_exit)(
+                    train_loop
+                )
             else:
                 elapsed_time, losses = timer(self.run_back_prop)(train_loop)
             logging.info("--------------------")
             logging.info("NN model solving")
-            logging.info(
-                f"Elapsed Time: {elapsed_time:.6f} seconds"
-            )
+            logging.info(f"Elapsed Time: {elapsed_time:.6f} seconds")
         else:
             train_loop = (
                 range(self.args.num_epochs)
@@ -237,11 +249,14 @@ class Runner(object):
                 else tqdm(range(self.args.num_epochs))
             )
             losses = self.run_back_prop(train_loop)
-        if self.args.loss_fn != 'ce':
+        if self.args.loss_fn != "ce":
             losses = torch.mean(losses, dim=1)
-        solutions  = torch.topk(1-losses, k=self.args.topk, dim=0).indices.tolist()
+        solutions = torch.topk(1 - losses, k=self.args.topk, dim=0).indices.tolist()
         solutions_found = [self.model.get_input_weights(s) for s in solutions]
-        solutions_found = [[(-1)**(1-sol[i]) * (i+1) for i in range(len(sol))] for sol in solutions_found]
+        solutions_found = [
+            [(-1) ** (1 - sol[i]) * (i + 1) for i in range(len(sol))]
+            for sol in solutions_found
+        ]
         self.results[prob_id].update(
             {
                 "model_runtime": elapsed_time,
@@ -257,7 +272,6 @@ class Runner(object):
         # run NN model solving
         solutions_found = self.run_model(problem, prob_id)
 
-       
         # solver_solution = self.run_baseline(problem, prob_id)
         # is_verified = any([sol == solver_solution for sol in solutions_found])
         # if not is_verified:
@@ -271,10 +285,11 @@ class Runner(object):
         # run baseline solver
         solver_solution = self.run_baseline(problem, prob_id)
         if self.args.dump_solution:
-            self.results[prob_id].update({"model_solution": self.model.get_input_weights(solutions_found[i])})
-        
+            self.results[prob_id].update(
+                {"model_solution": self.model.get_input_weights(solutions_found[i])}
+            )
+
         logging.info("--------------------\n")
-        
 
     def run_all_with_baseline(self):
         """Run all the problems in the dataset given as argument to the Runner."""
