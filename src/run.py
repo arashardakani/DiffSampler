@@ -40,7 +40,7 @@ class Runner(object):
         self.do_wandb = self.args.wandb_entity is not None and not self.args.latency_experiment
         if self.do_wandb:
             assert self.args.wandb_project is not None
-            config = {
+            self.wandb_config = {
                 "batch_size": self.args.batch_size,
                 "lr": self.args.learning_rate,
                 "steps": self.args.num_steps,
@@ -48,19 +48,7 @@ class Runner(object):
                 "loss_fn": self.args.loss_fn,
                 "optimizer": self.args.optimizer,
             }
-            wandb_name = self.args.wandb_group + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}"
-            wandb.init(
-                project=self.args.wandb_project,
-                entity=self.args.wandb_entity,
-                name=wandb_name,
-                id=wandb_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                resume="allow",
-                group=self.args.wandb_group,
-                # job_type=args.wandb_job_type,
-                # tags=args.wandb_tags.split(","),
-                config=config,
-            )
-            wandb.config.update(self.args)
+            # wandb.config.update(self.args)
         self._setup_problems()
 
     def _setup_problems(self):
@@ -144,6 +132,18 @@ class Runner(object):
             )
         # wandb logging
         if self.do_wandb:
+            prob_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
+            wandb.init(
+                project=self.args.wandb_project,
+                entity=self.args.wandb_entity,
+                name=prob_name,
+                id=prob_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                resume="allow",
+                group=self.args.wandb_group + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}",
+                # job_type=args.wandb_job_type,
+                # tags=args.wandb_tags.split(","),
+                config=self.wandb_config,
+            )
             for step in range(len(log_dict["loss"])):
                 wandb.log(
                     {

@@ -4,7 +4,11 @@ from pysat.formula import CNF
 from pysat.solvers import Solver
 from pysat.examples.genhard import PHP
 import pycryptosat
+from threading import Timer
 
+def interrupt(s):
+    s.interrupt()
+    
 class BaselineSolverRunner(object):
     """Baseline SAT solver runner."""
 
@@ -23,15 +27,23 @@ class BaselineSolverRunner(object):
         """Run the solver on the given problem.
         Assumes that the CNF problem to solve has been setup.
         """
-        start_time = time()
-        solve_out = self.solver.solve()
-        end_time = time()
-        elapsed_time = end_time - start_time
+        solutions = []
         if self.solver_name == 'cms' or self.solver_name == 'cryptominisat':
+            start_time = time()
+            solve_out = self.solver.solve()
+            end_time = time()
+            elapsed_time = end_time - start_time
             sat = solve_out[0]
-            solutions = [int(v) for v in solve_out[1][1:]]
+            if sat:
+                solutions = [int(v) for v in solve_out[1][1:]]
         else:
+            timer = Timer(10000, interrupt, [self.solver])
+            start_time = time()
+            solve_out = self.solver.solve_limited(expect_interrupt=True)
+            end_time = time()
+            elapsed_time = end_time - start_time
             sat = solve_out
-            solutions = [int(v > 0) for v in self.solver.get_model()]
+            if sat:
+                solutions = [int(v > 0) for v in self.solver.get_model()]
             self.solver.delete()
         return elapsed_time, sat, solutions
