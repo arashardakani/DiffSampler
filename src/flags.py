@@ -50,7 +50,8 @@ def parse_args():
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="what optimizer to use"
     )
-    # util parameters
+
+    # experiment util parameters
     parser.add_argument(
         "--use_cpu",
         action="store_true",
@@ -67,6 +68,22 @@ def parse_args():
         action="store_true",
         help="Whether to dump solution or not",
     )
+    parser.add_argument(
+        "--baseline_name", "-bn",
+        type=str,
+        default='m22',
+        help="Baseline solver names, comma separated",
+    )
+    parser.add_argument(
+        "--baseline_only", "-bo",
+        action="store_true",
+        help="Whether to run baseline solvers only",
+    )
+    parser.add_argument(
+        "--no_baseline", "-nb",
+        action="store_true",
+        help="Whether to run baseline solvers",
+    )
     # Wandb parameters
     parser.add_argument(
         "--wandb_entity", type=str, default=None, help="wandb entity (id) name"
@@ -74,16 +91,16 @@ def parse_args():
     parser.add_argument(
         "--wandb_project", type=str, default=None, help="wandb project name"
     )
-    parser.add_argument("--wandb_name", type=str, default=None, help="wandb run name")
+    # parser.add_argument("--wandb_name", type=str, default=None, help="wandb run name")
     parser.add_argument(
         "--wandb_group", type=str, default=None, help="wandb run group name"
     )
-    parser.add_argument(
-        "--wandb_job_type", type=str, default=None, help="wandb job type descrption"
-    )
-    parser.add_argument(
-        "--wandb_tags", type=str, default=None, help="wandb tags, comma separated"
-    )
+    # parser.add_argument(
+    #     "--wandb_job_type", type=str, default=None, help="wandb job type descrption"
+    # )
+    # parser.add_argument(
+    #     "--wandb_tags", type=str, default=None, help="wandb tags, comma separated"
+    # )
 
     args = parser.parse_args()
 
