@@ -243,11 +243,11 @@ def run_back_prop_verbose(
                 opt_state=opt_state,
                 literal_tensor=literal_tensor,
             )
-            is_complete = check_terminate(params, literal_tensor)
+            # is_complete = check_terminate(params, literal_tensor)
             log_dict['loss'].append(loss_value)
             log_dict['grad_norm'].append(jnp.linalg.norm(grads))
-            if is_complete:
-                break
+            # if is_complete:
+            #     break
         end_t = time.time()
     solutions = get_solutions(params, literal_tensor)
     return params, step + 1, loss_value, end_t - start_t, solutions, log_dict

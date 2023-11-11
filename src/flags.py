@@ -58,6 +58,12 @@ def parse_args():
         help="Whether touse cpu",
     )
     parser.add_argument(
+        "--num_experiments",
+        type=int,
+        default=-1,
+        help="Number of experiments to run",
+    )
+    parser.add_argument(
         "--latency_experiment",
         "-l",
         action="store_true",

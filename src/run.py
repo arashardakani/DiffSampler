@@ -62,6 +62,8 @@ class Runner(object):
                 pathlib.Path(__file__).parent.parent, self.args.dataset_path
             )
             self.datasets = sorted(glob.glob(dataset_path), key=os.path.getsize)
+            if self.args.num_experiments > 0:
+                self.datasets = self.datasets[: self.args.num_experiments]
             self.dataset_str = self.args.dataset_path.split("/")[1]
             self.results = {}
             logging.info(f"Dataset used: {self.dataset_str}")
@@ -78,6 +80,7 @@ class Runner(object):
             optimizer_str=self.args.optimizer,
         )
         if self.args.latency_experiment:
+            log_dict = {}
             (
                 params,
                 steps_ran,
@@ -147,13 +150,12 @@ class Runner(object):
             for step in range(len(log_dict["loss"])):
                 wandb.log(
                     {
-                        "step": step,
                         "loss": log_dict["loss"][step],
                         "grad_norm": log_dict["grad_norm"][step],
                     }
                 )
             wandb.finish()
-        return 
+        return log_dict
 
     def run_baseline(self, problem: CNF, prob_id: int = 0):
         """Run the baseline solver.
@@ -202,8 +204,10 @@ class Runner(object):
     def run(self, prob_id: int = 0):
         """Run the experiment."""
         problem = self.load_problem(prob_id)
+        self.logs = []
         if not self.args.baseline_only:
-            self.run_model(problem, prob_id)
+            log_dict = self.run_model(problem, prob_id)
+            self.logs.append(log_dict)
         if not self.args.no_baseline:
             self.run_baseline(problem, prob_id)
 
@@ -213,14 +217,25 @@ class Runner(object):
             self.run(prob_id=prob_id)
         if self.args.latency_experiment:
             self.export_results()
+        else:
+            self.export_logs()
 
     def export_results(self):
         """Export results to a file."""
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = f"{self.problem_type}_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
+        filename = f"latency_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
         filename += f"_{self.args.optimizer}_{self.args.learning_rate}.csv"
         filename = os.path.join(self.save_dir, filename)
         df = pd.DataFrame.from_dict(self.results)
+        df = df.transpose()
+        df.to_csv(filename, sep="\t", index=False)
+
+    def export_logs(self):
+        pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
+        filename = f"logs_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
+        filename += f"_{self.args.optimizer}_{self.args.learning_rate}.csv"
+        filename = os.path.join(self.save_dir, filename)
+        df = pd.DataFrame.from_dict(self.logs)
         df = df.transpose()
         df.to_csv(filename, sep="\t", index=False)
 
