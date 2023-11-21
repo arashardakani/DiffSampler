@@ -1,6 +1,7 @@
 from pysat.formula import CNF
 import jax.numpy as jnp
 import jax
+import numpy as np
 import optax
 import time
 from tqdm import tqdm
@@ -114,19 +115,14 @@ def run_back_prop_verbose(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        assignment, sat = find_satisfying_assignments(params, literal_tensor)
-        return jnp.unique(jnp.take(assignment, jnp.where(sat)[0], axis=0), axis=1)
-    
-    def find_satisfying_assignments(
-        params: jnp.ndarray,
-        literal_tensor: jnp.ndarray,
-    ):
+        # assignment = (params>0.5).astype(int)
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
         sat = jnp.take(assignment, jnp.abs(literal_tensor), fill_value=1, axis=1)
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         sat = jnp.all(jnp.any(sat > 0, axis=2), axis=1)
-        return assignment, sat
+        return jnp.take(assignment, jnp.where(sat)[0], axis=0)
 
+    @jax.jit
     def check_terminate(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
@@ -137,6 +133,7 @@ def run_back_prop_verbose(
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         return jnp.any(jnp.all(jnp.any(sat > 0, axis=2), axis=1), axis=0)
 
+    @jax.jit
     def compute_loss(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
@@ -146,14 +143,13 @@ def run_back_prop_verbose(
         x = jnp.where(literal_tensor > 0, x, 1 - x)
         x = 1 - jnp.prod(x, axis=-1)
         labels = jnp.ones((x.shape[0], x.shape[1]))
-        return optax.l2_loss(x, labels).sum()
+        return optax.l2_loss(x, labels).mean()
 
     def backprop_step(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
     ):
-        # l = compute_loss(params, literal_tensor)
         loss_value, grads = jax.value_and_grad(compute_loss)(params, literal_tensor)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
@@ -161,15 +157,11 @@ def run_back_prop_verbose(
 
     # (assignment_func(params)>0.5).astype(int
 
-    log_dict = {}
-    # log_dict = {'loss': [], 'grad_norm': [], 'solution_count': []}
-    log_dict['loss'] = [0] * num_steps
-    log_dict['grad_norm'] = [0] * num_steps
-    solution_log_interval = 20
-    log_dict['solution_count'] = [0] * (num_steps // solution_log_interval)
-    # params = jax.nn.sigmoid(params)
+    log_dict = {'loss': [], 'grad_norm': [], 'solution_count': []}
+    solution_log_interval = 5
     start_t = time.time()
     opt_state = optimizer.init(params)
+    solution_count = 0
     for step in tqdm(range(num_steps), desc="Gradient Descent"):
         params, opt_state, loss_value, grads = backprop_step(
             params=params,
@@ -177,16 +169,18 @@ def run_back_prop_verbose(
             literal_tensor=literal_tensor,
         )
         # is_complete = check_terminate(params, literal_tensor)
-        log_dict['loss'][step] = float(loss_value)
-        log_dict['grad_norm'][step] = float(jnp.linalg.norm(grads))
-        # if step % solution_log_interval == 0:
-        #     solutions = get_solutions(params, literal_tensor)
-        #     log_dict['solution_count'][step//solution_log_interval] = len(solutions)
-        #     del solutions
+        log_dict['loss'].append(float(loss_value))
+        log_dict['grad_norm'].append(float(jnp.linalg.norm(grads)))
+         
+        if step % solution_log_interval == 0:
+            solutions = np.unique(get_solutions(params, literal_tensor),axis=1)
+            solution_count = len(solutions)
+            del solutions
+        log_dict['solution_count'].append(solution_count)
         # logging.info(f"Step {step}, loss: {loss_value}, grad_norm: {jnp.linalg.norm(grads)}, solution_count: {len(get_solutions(params, literal_tensor))}")
         # logging.info(f"{jax.nn.sigmoid(params[:5])}")
         end_t = time.time()
-    solutions = get_solutions(params, literal_tensor)
+    solutions = np.unique(get_solutions(params, literal_tensor),axis=1)
     return params, step + 1, loss_value, end_t - start_t, solutions, log_dict
 
 

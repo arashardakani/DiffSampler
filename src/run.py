@@ -7,11 +7,12 @@ from datetime import datetime
 
 import jax
 import jax.numpy as jnp
-from tqdm import tqdm
+import numpy as np
 import pandas as pd
 from pysat.formula import CNF
 from pysat.examples.genhard import PHP
 from pysat.solvers import Solver
+from tqdm import tqdm
 import wandb
 
 import flags
@@ -110,16 +111,6 @@ class Runner(object):
                 literal_tensor=literal_tensor,
             )
             elapsed_time = 0
-            # throughput_log_dict = {}
-            # for i in tqdm(range(0,self.args.num_steps,5), desc="Throughput logging"):
-            #     _, _, _, _, solutions_found,_ = circuit.run_back_prop(
-            #         num_steps=i,
-            #         params=params,
-            #         optimizer=optimizer,
-            #         literal_tensor=literal_tensor,
-            #     )
-            #     throughput_log_dict[i] = len(solutions_found)
-            #     del solutions_found
         logging.info("--------------------")
         logging.info("Differential model solving")
         logging.critical(
@@ -163,6 +154,11 @@ class Runner(object):
                         "solution_count": log_dict["solution_count"][step],
                     }
                 )
+            # final_unique_solution_count = len(np.unique(solutions_found, axis=1))
+            # wandb.log(
+            #     {"final_unique_solution_count": final_unique_solution_count}
+            # )
+            # log_dict["final_unique_solution_count"] = [final_unique_solution_count] * len(log_dict["loss"])
             wandb.finish()
         return log_dict
 
@@ -213,15 +209,16 @@ class Runner(object):
     def run(self, prob_id: int = 0):
         """Run the experiment."""
         problem = self.load_problem(prob_id)
-        self.logs = []
         if not self.args.baseline_only:
             log_dict = self.run_model(problem, prob_id)
-            self.logs.append(log_dict)
+            problem_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
+            self.logs[problem_name] = log_dict
         if not self.args.no_baseline:
             self.run_baseline(problem, prob_id)
 
     def run_all(self):
         """Run all the problems in the dataset given as argument to the Runner."""
+        self.logs = {}
         for prob_id in range(len(self.datasets)):
             self.run(prob_id=prob_id)
         if self.args.latency_experiment:
@@ -241,12 +238,13 @@ class Runner(object):
 
     def export_logs(self):
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = f"logs_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
-        filename += f"_{self.args.optimizer}_{self.args.learning_rate}.csv"
-        filename = os.path.join(self.save_dir, filename)
-        df = pd.DataFrame.from_dict(self.logs)
-        df = df.transpose()
-        df.to_csv(filename, sep="\t", index=False)
+        exp_name = f"logs_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
+        exp_name += f"_{self.args.optimizer}_{self.args.learning_rate}"
+        pathlib.Path(self.save_dir / exp_name).mkdir(parents=True, exist_ok=True)
+        for k, v in self.logs.items():
+            filename = os.path.join(self.save_dir / exp_name, k + ".csv")
+            df = pd.DataFrame.from_dict(v)
+            df.to_csv(filename, sep="\t", index=False)
 
 
 if __name__ == "__main__":
