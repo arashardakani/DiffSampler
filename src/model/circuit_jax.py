@@ -42,7 +42,6 @@ def run_back_prop(
     optimizer: optax.GradientTransformation,
     literal_tensor: jnp.ndarray,
     num_steps: int,
-    loss_fn_str: str = "sigmoid_binary_cross_entropy",
 ) -> optax.Params:
     """with activation function"""
 
@@ -69,7 +68,7 @@ def run_back_prop(
         return jnp.any(jnp.all(jnp.any(sat > 0, axis=2), axis=1), axis=0)
 
     @jax.jit
-    def compute_loss_l2(
+    def compute_loss(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
@@ -81,31 +80,7 @@ def run_back_prop(
         return optax.l2_loss(x, labels).mean()
 
     @jax.jit
-    def step_l2(
-        params: jnp.ndarray,
-        opt_state: optax.OptState,
-        literal_tensor: jnp.ndarray,
-    ):
-        loss_value, grads = jax.value_and_grad(compute_loss_l2)(params, literal_tensor)
-        updates, opt_state = optimizer.update(grads, opt_state)
-        params = optax.apply_updates(params, updates)
-        return params, opt_state, loss_value
-
-    # (assignment_func(params)>0.5).astype(int)
-    @jax.jit
-    def compute_loss(
-        params: jnp.ndarray,
-        literal_tensor: jnp.ndarray,
-    ):
-        params = jax.nn.sigmoid(params)
-        x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
-        x = jnp.where(literal_tensor > 0, x, 1 - x)
-        x = 1 - jnp.prod(x, axis=-1)
-        labels = jnp.ones((x.shape[0], x.shape[1]))
-        return optax.sigmoid_binary_cross_entropy(x, labels).mean()
-
-    @jax.jit
-    def step(
+    def backprop_step(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
@@ -115,34 +90,16 @@ def run_back_prop(
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss_value
 
-    # params = jax.nn.sigmoid(params)
-    if loss_fn_str == "sigmoid_binary_cross_entropy":
-        start_t = time.time()
-        opt_state = optimizer.init(params)
-        for step in range(num_steps):
-            params, opt_state, loss_value = step(
-                params=params,
-                opt_state=opt_state,
-                literal_tensor=literal_tensor,
-            )
-            is_complete = check_terminate(params, literal_tensor)
-            if is_complete:
-                break
-        end_t = time.time()
-    else:
-        start_t = time.time()
-        opt_state = optimizer.init(params)
-        for step in range(num_steps):
-            params, opt_state, loss_value = step_l2(
-                params=params,
-                opt_state=opt_state,
-                literal_tensor=literal_tensor,
-            )
-            is_complete = check_terminate(params, literal_tensor)
-            if is_complete:
-                break
-        end_t = time.time()
-    solutions = get_solutions(params, literal_tensor)
+    start_t = time.time()
+    opt_state = optimizer.init(params)
+    for step in range(num_steps):
+        params, opt_state, loss_value = backprop_step(
+            params=params,
+            opt_state=opt_state,
+            literal_tensor=literal_tensor,
+        )
+    end_t = time.time()
+    solutions = jnp.unique(get_solutions(params, literal_tensor), axis=1)
     return params, step + 1, loss_value, end_t - start_t, solutions
 
 
@@ -151,18 +108,24 @@ def run_back_prop_verbose(
     optimizer: optax.GradientTransformation,
     literal_tensor: jnp.ndarray,
     num_steps: int,
-    loss_fn_str: str = "sigmoid_binary_cross_entropy",
 ) -> optax.Params:
+
     def get_solutions(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        # assignment = (params>0.5).astype(int)
+        assignment, sat = find_satisfying_assignments(params, literal_tensor)
+        return jnp.unique(jnp.take(assignment, jnp.where(sat)[0], axis=0), axis=1)
+    
+    def find_satisfying_assignments(
+        params: jnp.ndarray,
+        literal_tensor: jnp.ndarray,
+    ):
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
         sat = jnp.take(assignment, jnp.abs(literal_tensor), fill_value=1, axis=1)
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         sat = jnp.all(jnp.any(sat > 0, axis=2), axis=1)
-        return jnp.take(assignment, jnp.where(sat)[0], axis=0)
+        return assignment, sat
 
     def check_terminate(
         params: jnp.ndarray,
@@ -174,7 +137,7 @@ def run_back_prop_verbose(
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         return jnp.any(jnp.all(jnp.any(sat > 0, axis=2), axis=1), axis=0)
 
-    def compute_loss_l2(
+    def compute_loss(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
@@ -185,95 +148,45 @@ def run_back_prop_verbose(
         labels = jnp.ones((x.shape[0], x.shape[1]))
         return optax.l2_loss(x, labels).sum()
 
-    def step_l2(
+    def backprop_step(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
     ):
-        l = compute_loss_l2(params, literal_tensor)
-        loss_value, grads = jax.value_and_grad(compute_loss_l2)(params, literal_tensor)
-        updates, opt_state = optimizer.update(grads, opt_state)
-        params = optax.apply_updates(params, updates)
-        return params, opt_state, loss_value, grads
-
-    # (assignment_func(params)>0.5).astype(int)
-
-    def compute_loss(
-        params: jnp.ndarray,
-        literal_tensor: jnp.ndarray,
-    ):
-        params = jax.nn.sigmoid(params)
-        x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
-        x = jnp.where(literal_tensor > 0, x, 1 - x)
-        x = 1 - jnp.prod(x, axis=-1)
-        labels = jnp.ones((x.shape[0], x.shape[1]))
-        return optax.sigmoid_binary_cross_entropy(x, labels).sum()
-
-    def step(
-        params: jnp.ndarray,
-        opt_state: optax.OptState,
-        literal_tensor: jnp.ndarray,
-    ):
+        # l = compute_loss(params, literal_tensor)
         loss_value, grads = jax.value_and_grad(compute_loss)(params, literal_tensor)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss_value, grads
 
-    log_dict = {'loss': [], 'grad_norm': []}
+    # (assignment_func(params)>0.5).astype(int
+
+    log_dict = {}
+    # log_dict = {'loss': [], 'grad_norm': [], 'solution_count': []}
+    log_dict['loss'] = [0] * num_steps
+    log_dict['grad_norm'] = [0] * num_steps
+    solution_log_interval = 20
+    log_dict['solution_count'] = [0] * (num_steps // solution_log_interval)
     # params = jax.nn.sigmoid(params)
-    if loss_fn_str == "sigmoid_binary_cross_entropy":
-        start_t = time.time()
-        opt_state = optimizer.init(params)
-        for step in tqdm(range(num_steps), desc="Gradient Descent"):
-            params, opt_state, loss_value, grads = step(
-                params=params,
-                opt_state=opt_state,
-                literal_tensor=literal_tensor,
-            )
-            is_complete = check_terminate(params, literal_tensor)
-            if is_complete:
-                break
-        end_t = time.time()
-    else:
-        start_t = time.time()
-        opt_state = optimizer.init(params)
-        for step in tqdm(range(num_steps), desc="Gradient Descent"):
-            params, opt_state, loss_value, grads = step_l2(
-                params=params,
-                opt_state=opt_state,
-                literal_tensor=literal_tensor,
-            )
-            # is_complete = check_terminate(params, literal_tensor)
-            log_dict['loss'].append(loss_value)
-            log_dict['grad_norm'].append(jnp.linalg.norm(grads))
-            # if is_complete:
-            #     break
+    start_t = time.time()
+    opt_state = optimizer.init(params)
+    for step in tqdm(range(num_steps), desc="Gradient Descent"):
+        params, opt_state, loss_value, grads = backprop_step(
+            params=params,
+            opt_state=opt_state,
+            literal_tensor=literal_tensor,
+        )
+        # is_complete = check_terminate(params, literal_tensor)
+        log_dict['loss'][step] = float(loss_value)
+        log_dict['grad_norm'][step] = float(jnp.linalg.norm(grads))
+        # if step % solution_log_interval == 0:
+        #     solutions = get_solutions(params, literal_tensor)
+        #     log_dict['solution_count'][step//solution_log_interval] = len(solutions)
+        #     del solutions
+        # logging.info(f"Step {step}, loss: {loss_value}, grad_norm: {jnp.linalg.norm(grads)}, solution_count: {len(get_solutions(params, literal_tensor))}")
+        # logging.info(f"{jax.nn.sigmoid(params[:5])}")
         end_t = time.time()
     solutions = get_solutions(params, literal_tensor)
     return params, step + 1, loss_value, end_t - start_t, solutions, log_dict
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    circuit = SATCircuit(
-        use_pgates=True,
-        key=jax.random.PRNGKey(0),
-        batch_size=1000,
-    )
-    params, optimizer, var_tensor, sign_tensor, labels = circuit.init_problem(
-        cnf_problem=CNF(
-            from_file="/rscratch/jmk/projects/hwv/data/pigeon_hole_hard/pigeon_hole_10-SAT.cnf"
-        ),
-    )
-    final_params, step, loss_value, elapsed_time = circuit.fit(
-        num_steps=1000,
-        params=params,
-        optimizer=optimizer,
-        var_tensor=var_tensor,
-        sign_tensor=sign_tensor,
-        labels=labels,
-    )
-    print(f"Time taken: {elapsed_time}")
-    print(f"step {step}, loss: {loss_value}")
-    # sat = circuit.check_sat(final_params, var_tensor, sign_tensor)
-    # print(sat)

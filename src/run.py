@@ -6,6 +6,8 @@ import random
 from datetime import datetime
 
 import jax
+import jax.numpy as jnp
+from tqdm import tqdm
 import pandas as pd
 from pysat.formula import CNF
 from pysat.examples.genhard import PHP
@@ -36,9 +38,9 @@ class Runner(object):
         self.dataset_str = ""
         if self.args.use_cpu:
             jax.config.update("jax_platform_name", "cpu")
-        self.key = jax.random.PRNGKey(self.args.seed)
         self.do_wandb = self.args.wandb_entity is not None and not self.args.latency_experiment
         if self.do_wandb:
+            logging.info("Logging to wandb")
             assert self.args.wandb_project is not None
             self.wandb_config = {
                 "batch_size": self.args.batch_size,
@@ -92,8 +94,6 @@ class Runner(object):
                 params=params,
                 optimizer=optimizer,
                 literal_tensor=literal_tensor,
-                # labels=labels,
-                loss_fn_str=self.args.loss_fn,
             )
         else:
             (
@@ -108,10 +108,18 @@ class Runner(object):
                 params=params,
                 optimizer=optimizer,
                 literal_tensor=literal_tensor,
-                # labels=labels,
-                loss_fn_str=self.args.loss_fn,
             )
             elapsed_time = 0
+            # throughput_log_dict = {}
+            # for i in tqdm(range(0,self.args.num_steps,5), desc="Throughput logging"):
+            #     _, _, _, _, solutions_found,_ = circuit.run_back_prop(
+            #         num_steps=i,
+            #         params=params,
+            #         optimizer=optimizer,
+            #         literal_tensor=literal_tensor,
+            #     )
+            #     throughput_log_dict[i] = len(solutions_found)
+            #     del solutions_found
         logging.info("--------------------")
         logging.info("Differential model solving")
         logging.critical(
@@ -152,6 +160,7 @@ class Runner(object):
                     {
                         "loss": log_dict["loss"][step],
                         "grad_norm": log_dict["grad_norm"][step],
+                        "solution_count": log_dict["solution_count"][step],
                     }
                 )
             wandb.finish()
