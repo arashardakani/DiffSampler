@@ -16,7 +16,9 @@ from tqdm import tqdm
 import wandb
 
 import flags
-import model.circuit_jax as circuit
+# import model.circuit_jax as circuit
+import model.circuit_multigpu as circuit
+
 from utils.baseline_sat import BaselineSolverRunner
 
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +50,6 @@ class Runner(object):
                 "lr": self.args.learning_rate,
                 "steps": self.args.num_steps,
                 "train_data_path": self.args.dataset_path,
-                "loss_fn": self.args.loss_fn,
                 "optimizer": self.args.optimizer,
             }
             # wandb.config.update(self.args)
@@ -75,12 +76,13 @@ class Runner(object):
 
     def run_model(self, problem: CNF, prob_id: int = 0):
         solutions_found = []
-        params, optimizer, literal_tensor, labels = circuit.init_problem(
+        params, optimizer, literal_tensor = circuit.init_problem(
             cnf_problem=problem,
             batch_size=self.args.batch_size,
             key=self.key,
             learning_rate=self.args.learning_rate,
             optimizer_str=self.args.optimizer,
+            single_device=self.args.single_device,
         )
         if self.args.latency_experiment:
             log_dict = {}
@@ -141,9 +143,9 @@ class Runner(object):
                 name=prob_name,
                 id=prob_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 resume="allow",
-                group=self.args.wandb_group + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}",
+                group=self.args.wandb_group + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}" + "_".join(self.args.wandb_tags.split(",")),
                 # job_type=args.wandb_job_type,
-                # tags=args.wandb_tags.split(","),
+                tags=self.args.wandb_tags.split(","),
                 config=self.wandb_config,
             )
             for step in range(len(log_dict["loss"])):
@@ -229,7 +231,7 @@ class Runner(object):
     def export_results(self):
         """Export results to a file."""
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = f"latency_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
+        filename = f"latency_{self.dataset_str}_{self.args.batch_size}"
         filename += f"_{self.args.optimizer}_{self.args.learning_rate}.csv"
         filename = os.path.join(self.save_dir, filename)
         df = pd.DataFrame.from_dict(self.results)
@@ -238,7 +240,7 @@ class Runner(object):
 
     def export_logs(self):
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        exp_name = f"logs_{self.dataset_str}_{self.args.batch_size}_{self.args.loss_fn}"
+        exp_name = f"logs_{self.dataset_str}_{self.args.batch_size}"
         exp_name += f"_{self.args.optimizer}_{self.args.learning_rate}"
         pathlib.Path(self.save_dir / exp_name).mkdir(parents=True, exist_ok=True)
         for k, v in self.logs.items():

@@ -15,6 +15,7 @@ def init_problem(
     key: jnp.ndarray = None,
     learning_rate: float = 1.0,
     optimizer_str: str = "sgd",
+    single_device: bool = False,
 ):
     max_clause_len = max([len(clause) for clause in cnf_problem.clauses])
     num_clauses = len(cnf_problem.clauses)
@@ -34,8 +35,7 @@ def init_problem(
         optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.9)
     else:
         raise NotImplementedError
-    labels = jnp.ones((batch_size, len(cnf_problem.clauses)))
-    return embedding, optimizer, literal_tensor, labels
+    return embedding, optimizer, literal_tensor
 
 
 def run_back_prop(
@@ -78,7 +78,7 @@ def run_back_prop(
         x = jnp.where(literal_tensor > 0, x, 1 - x)
         x = 1 - jnp.prod(x, axis=-1)
         labels = jnp.ones((x.shape[0], x.shape[1]))
-        return optax.l2_loss(x, labels).mean()
+        return optax.l2_loss(x, labels).sum()
 
     @jax.jit
     def backprop_step(
@@ -141,9 +141,11 @@ def run_back_prop_verbose(
         params = jax.nn.sigmoid(params)
         x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
         x = jnp.where(literal_tensor > 0, x, 1 - x)
-        x = 1 - jnp.prod(x, axis=-1)
-        labels = jnp.ones((x.shape[0], x.shape[1]))
-        return optax.l2_loss(x, labels).mean()
+        x = jnp.log(x)
+        x = - jnp.sum(x, axis=-1)
+        #labels = jnp.ones((x.shape[0], x.shape[1]))
+        labels = jnp.zeros((x.shape[0], x.shape[1]))
+        return optax.l2_loss(x, labels).sum()
 
     def backprop_step(
         params: jnp.ndarray,
@@ -177,8 +179,8 @@ def run_back_prop_verbose(
             solution_count = len(solutions)
             del solutions
         log_dict['solution_count'].append(solution_count)
-        # logging.info(f"Step {step}, loss: {loss_value}, grad_norm: {jnp.linalg.norm(grads)}, solution_count: {len(get_solutions(params, literal_tensor))}")
-        # logging.info(f"{jax.nn.sigmoid(params[:5])}")
+        logging.info(f"Step {step}, loss: {loss_value}, grad_norm: {jnp.linalg.norm(grads)}, solution_count: {len(get_solutions(params, literal_tensor))}")
+        logging.info(f"{jax.nn.sigmoid(params[:5])}")
         end_t = time.time()
     solutions = np.unique(get_solutions(params, literal_tensor),axis=1)
     return params, step + 1, loss_value, end_t - start_t, solutions, log_dict

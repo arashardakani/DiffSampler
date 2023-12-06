@@ -40,22 +40,20 @@ def parse_args():
         default=1,
         help="Batch size per GPU/CPU for training.",
     )
-
-    parser.add_argument(
-        "--loss_fn",
-        type=str,
-        default="sigmoid_binary_cross_entropy",
-        help="what loss function to use",
-    )
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="what optimizer to use"
     )
 
+    parser.add_argument(
+        "--single_device",
+        action="store_true",
+        help="Whether to use single gpu, i.e. by default use all available devices",
+    )
     # experiment util parameters
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether touse cpu",
+        help="Whether to use cpu",
     )
     parser.add_argument(
         "--num_experiments",
@@ -104,9 +102,9 @@ def parse_args():
     # parser.add_argument(
     #     "--wandb_job_type", type=str, default=None, help="wandb job type descrption"
     # )
-    # parser.add_argument(
-    #     "--wandb_tags", type=str, default=None, help="wandb tags, comma separated"
-    # )
+    parser.add_argument(
+        "--wandb_tags", type=str, default="", help="wandb tags, comma separated"
+    )
 
     args = parser.parse_args()
 

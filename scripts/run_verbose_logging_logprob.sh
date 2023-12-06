@@ -9,7 +9,7 @@ python src/run.py \
     --wandb_entity "ucb-hcrl" \
     --wandb_project "gdsampler" \
     --wandb_group "counting_fmcad_or" \
-     --wandb_tags "l2,default"
+     --wandb_tags "l2,logprob"
 
 python src/run.py \
     -d "data/counting_bl/*" -b 10000 \
@@ -19,7 +19,7 @@ python src/run.py \
     --wandb_entity "ucb-hcrl" \
     --wandb_project "gdsampler" \
     --wandb_group "counting_fmcad_blasted" \
-    --wandb_tags "l2,default"
+    --wandb_tags "l2,logprob"
 
 python src/run.py \
     -d "data/counting_hard/*" -b 1000 \
@@ -29,7 +29,7 @@ python src/run.py \
     --wandb_entity "ucb-hcrl" \
     --wandb_project "gdsampler" \
     --wandb_group "counting_fmcad_hard" \
-    --wandb_tags "l2,default"
+    --wandb_tags "l2,logprob"
 
 # python src/run.py \
 #     -d "data/counting2/blasted*" -b 10000 \
