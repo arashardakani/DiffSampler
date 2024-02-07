@@ -16,8 +16,11 @@ from tqdm import tqdm
 import wandb
 
 import flags
+
 # import model.circuit_jax as circuit
-import model.circuit_multigpu as circuit
+from model.circuit_multigpu import init_problem
+from model.gdsolve import gdsolve
+from model.gdsolve_verbose import gdsolve_verbose
 
 from utils.baseline_sat import BaselineSolverRunner
 
@@ -34,14 +37,32 @@ class Runner(object):
             logging.info(
                 "\n".join([f"{k}: {v}" for k, v in self.args.__dict__.items()])
             )
+
         random.seed(self.args.seed)
         self.key = jax.random.PRNGKey(self.args.seed)
-        self.save_dir = pathlib.Path(__file__).parent.parent / "results"
+
         self.datasets = []
         self.dataset_str = ""
+        self._setup_problems()
+
+        self.save_dir = pathlib.Path(__file__).parent.parent / "results"
+        self.save_dir = (
+            self.save_dir
+            / (f"{self.dataset_str}_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}_{datetime.now().strftime('%Y%m%d')}"
+            + "_latency"
+            if self.args.latency_experiment
+            else "_logging")
+        )
+        pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
+
         if self.args.use_cpu:
             jax.config.update("jax_platform_name", "cpu")
-        self.do_wandb = self.args.wandb_entity is not None and not self.args.latency_experiment
+
+        self.do_wandb = (
+            self.args.wandb_entity is not None
+            and not self.args.latency_experiment
+            and not self.args.debug
+        )
         if self.do_wandb:
             logging.info("Logging to wandb")
             assert self.args.wandb_project is not None
@@ -52,8 +73,6 @@ class Runner(object):
                 "train_data_path": self.args.dataset_path,
                 "optimizer": self.args.optimizer,
             }
-            # wandb.config.update(self.args)
-        self._setup_problems()
 
     def _setup_problems(self):
         """Setup the problem.
@@ -75,8 +94,25 @@ class Runner(object):
             raise NotImplementedError
 
     def run_model(self, problem: CNF, prob_id: int = 0):
+        # wandb logging
+        prob_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
+        if self.do_wandb:
+            wandb_init_config = {
+                "project": self.args.wandb_project,
+                "entity": self.args.wandb_entity,
+                "name": prob_name,
+                "id": prob_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "resume": "allow",
+                "group": self.args.wandb_group
+                + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}_"
+                + "_".join(self.args.wandb_tags.split(",")),
+                "tags": self.args.wandb_tags.split(","),
+                "config": self.wandb_config,
+            }
+        else:
+            wandb_init_config = {}
         solutions_found = []
-        params, optimizer, literal_tensor = circuit.init_problem(
+        params, optimizer, literal_tensor = init_problem(
             cnf_problem=problem,
             batch_size=self.args.batch_size,
             key=self.key,
@@ -84,15 +120,16 @@ class Runner(object):
             optimizer_str=self.args.optimizer,
             single_device=self.args.single_device,
         )
+        log_dict = {}
+        result_dict = {}
         if self.args.latency_experiment:
-            log_dict = {}
             (
                 params,
                 steps_ran,
                 loss,
                 elapsed_time,
                 solutions_found,
-            ) = circuit.run_back_prop(
+            ) = gdsolve(
                 num_steps=self.args.num_steps,
                 params=params,
                 optimizer=optimizer,
@@ -105,14 +142,21 @@ class Runner(object):
                 loss,
                 elapsed_time,
                 solutions_found,
-                log_dict,
-            ) = circuit.run_back_prop_verbose(
+                verbose_log_dict,
+                all_params,
+                all_losses,
+            ) = gdsolve_verbose(
                 num_steps=self.args.num_steps,
                 params=params,
                 optimizer=optimizer,
                 literal_tensor=literal_tensor,
+                do_wandb=self.do_wandb,
+                wandb_init_config=wandb_init_config,
             )
+            log_dict = verbose_log_dict
             elapsed_time = 0
+            self.export_vector(all_params, prob_id, tag="emb")
+            self.export_vector(all_losses, prob_id, tag="loss")
         logging.info("--------------------")
         logging.info("Differential model solving")
         logging.critical(
@@ -123,7 +167,7 @@ class Runner(object):
             logging.critical("Model solution verified")
         else:
             logging.critical("No solution")
-        self.results[prob_id].update(
+        result_dict.update(
             {
                 "model_runtime": elapsed_time,
                 "model_steps_ran": steps_ran,
@@ -134,35 +178,8 @@ class Runner(object):
             self.results[prob_id].update(
                 {"model_solution": self.model.get_input_weights(solutions_found[i])}
             )
-        # wandb logging
-        if self.do_wandb:
-            prob_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
-            wandb.init(
-                project=self.args.wandb_project,
-                entity=self.args.wandb_entity,
-                name=prob_name,
-                id=prob_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                resume="allow",
-                group=self.args.wandb_group + f"_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}" + "_".join(self.args.wandb_tags.split(",")),
-                # job_type=args.wandb_job_type,
-                tags=self.args.wandb_tags.split(","),
-                config=self.wandb_config,
-            )
-            for step in range(len(log_dict["loss"])):
-                wandb.log(
-                    {
-                        "loss": log_dict["loss"][step],
-                        "grad_norm": log_dict["grad_norm"][step],
-                        "solution_count": log_dict["solution_count"][step],
-                    }
-                )
-            # final_unique_solution_count = len(np.unique(solutions_found, axis=1))
-            # wandb.log(
-            #     {"final_unique_solution_count": final_unique_solution_count}
-            # )
-            # log_dict["final_unique_solution_count"] = [final_unique_solution_count] * len(log_dict["loss"])
-            wandb.finish()
-        return log_dict
+
+        return log_dict, result_dict
 
     def run_baseline(self, problem: CNF, prob_id: int = 0):
         """Run the baseline solver.
@@ -172,24 +189,24 @@ class Runner(object):
             prob_id (int, optional): Index of the problem to be solved. Defaults to 0.
         """
         solver_names = self.args.baseline_name.split(",")
-
+        results = {}
         for solver_name in solver_names:
             baseline = BaselineSolverRunner(
                 cnf_problem=problem, solver_name=solver_name
             )
             baseline_elapsed_time, result, solver_solutions = baseline.run()
-            logging.critical(f"Baseline {solver_name} Elapsed Time: {baseline_elapsed_time:.6f} seconds.")
-            self.results[prob_id].update(
+            logging.critical(
+                f"Baseline {solver_name} Elapsed Time: {baseline_elapsed_time:.6f} seconds."
+            )
+            results.update(
                 {
                     f"baseline_{solver_name}_runtime": baseline_elapsed_time,
                     f"baseline_{solver_name}_result": result,
                 }
             )
             if self.args.dump_solution:
-                self.results[prob_id].update(
-                    {f"baseline_{solver_name}_solution": solver_solutions}
-                )
-        return 
+                results.update({f"baseline_{solver_name}_solution": solver_solutions})
+        return results
 
     def load_problem(self, prob_id: int):
         """Load a problem from the dataset.
@@ -199,54 +216,58 @@ class Runner(object):
         """
         logging.info(f"Loading problem from {self.datasets[prob_id]}")
         problem = CNF(from_file=self.datasets[prob_id])
-        self.results[prob_id] = {
+        logging_dict = {
             "prob_desc": self.datasets[prob_id].split("/")[-1],
             "num_vars": problem.nv,
             "num_clauses": len(problem.clauses),
         }
         logging.info(f"num_vars: {problem.nv}")
         logging.info(f"num_clauses: {len(problem.clauses)}")
-        return problem
+        return problem, logging_dict
 
     def run(self, prob_id: int = 0):
         """Run the experiment."""
-        problem = self.load_problem(prob_id)
+        self.problem_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
+        pathlib.Path(self.save_dir / self.problem_name).mkdir(
+            parents=True, exist_ok=True
+        )
+        problem, results_dict = self.load_problem(prob_id)
+        results = {}
         if not self.args.baseline_only:
-            log_dict = self.run_model(problem, prob_id)
-            problem_name = self.datasets[prob_id].split("/")[-1].split(".cnf")[0]
-            self.logs[problem_name] = log_dict
+            run_logs, model_results = self.run_model(problem, prob_id)
+            results_dict.update(model_results)
         if not self.args.no_baseline:
-            self.run_baseline(problem, prob_id)
+            baseline_results = self.run_baseline(problem, prob_id)
+            results_dict.update(baseline_results)
+        if self.args.latency_experiment:
+            self.export_result(results_dict)
+        else:
+            self.export_logs(run_logs, prob_id)
 
     def run_all(self):
         """Run all the problems in the dataset given as argument to the Runner."""
-        self.logs = {}
+        exp_name = f"logs_{self.dataset_str}_{self.args.batch_size}"
+        exp_name += f"_{self.args.optimizer}_{self.args.learning_rate}"
+
         for prob_id in range(len(self.datasets)):
             self.run(prob_id=prob_id)
-        if self.args.latency_experiment:
-            self.export_results()
-        else:
-            self.export_logs()
 
-    def export_results(self):
+    def export_result(self, result_dict, prob_id):
         """Export results to a file."""
-        pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        filename = f"latency_{self.dataset_str}_{self.args.batch_size}"
-        filename += f"_{self.args.optimizer}_{self.args.learning_rate}.csv"
-        filename = os.path.join(self.save_dir, filename)
-        df = pd.DataFrame.from_dict(self.results)
+        filename = os.path.join(self.save_dir / self.problem_name, "results.csv")
+        df = pd.DataFrame.from_dict(results_dict)
         df = df.transpose()
         df.to_csv(filename, sep="\t", index=False)
 
-    def export_logs(self):
-        pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
-        exp_name = f"logs_{self.dataset_str}_{self.args.batch_size}"
-        exp_name += f"_{self.args.optimizer}_{self.args.learning_rate}"
-        pathlib.Path(self.save_dir / exp_name).mkdir(parents=True, exist_ok=True)
-        for k, v in self.logs.items():
-            filename = os.path.join(self.save_dir / exp_name, k + ".csv")
-            df = pd.DataFrame.from_dict(v)
-            df.to_csv(filename, sep="\t", index=False)
+    def export_vector(self, stacked_vector, prob_id, tag="emb"):
+        filename = os.path.join(self.save_dir / self.problem_name, tag + ".npy")
+        with open(filename, "wb") as f:
+            np.save(f, stacked_vector)
+
+    def export_logs(self, log_dict, prob_id):
+        filename = os.path.join(self.save_dir / self.problem_name, "run_logs.csv")
+        df = pd.DataFrame.from_dict(log_dict)
+        df.to_csv(filename, sep="\t", index=False)
 
 
 if __name__ == "__main__":

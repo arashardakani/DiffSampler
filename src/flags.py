@@ -73,20 +73,29 @@ def parse_args():
         help="Whether to dump solution or not",
     )
     parser.add_argument(
-        "--baseline_name", "-bn",
+        "--baseline_name",
+        "-bn",
         type=str,
-        default='m22',
+        default="m22",
         help="Baseline solver names, comma separated",
     )
     parser.add_argument(
-        "--baseline_only", "-bo",
+        "--baseline_only",
+        "-bo",
         action="store_true",
         help="Whether to run baseline solvers only",
     )
     parser.add_argument(
-        "--no_baseline", "-nb",
+        "--no_baseline",
+        "-nb",
         action="store_true",
         help="Whether to run baseline solvers",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Whether to run in debug",
     )
     # Wandb parameters
     parser.add_argument(

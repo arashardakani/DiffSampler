@@ -3,7 +3,7 @@ OPTIMIZER=$2
 
 python src/run.py \
     -d "data/counting_or/*" -b 10000 \
-    --lr $lr --optimizer ${OPTIMIZER} \
+    --lr $lr --optimizer ${OPTIMIZER} -l \
     --num_steps 100 \
     -nb \
     --wandb_entity "ucb-hcrl" \
@@ -11,25 +11,35 @@ python src/run.py \
     --wandb_group "counting_fmcad_or" \
      --wandb_tags "l2,logprob"
 
-python src/run.py \
-    -d "data/counting_bl/*" -b 10000 \
-    --lr $lr --optimizer ${OPTIMIZER} \
-    --num_steps 1000 \
-    -nb \
-    --wandb_entity "ucb-hcrl" \
-    --wandb_project "gdsampler" \
-    --wandb_group "counting_fmcad_blasted" \
-    --wandb_tags "l2,logprob"
+# python src/run.py \
+#     -d "data/counting_debug/*" -b 10000 \
+#     --lr $lr --optimizer ${OPTIMIZER} \
+#     --num_steps 100 \
+#     -nb \
+#     --wandb_entity "ucb-hcrl" \
+#     --wandb_project "gdsampler" \
+#     --wandb_group "debug" \
+#     --wandb_tags "l2,logprob"
 
-python src/run.py \
-    -d "data/counting_hard/*" -b 1000 \
-    --lr $lr --optimizer ${OPTIMIZER} \
-    --num_steps 1000 \
-    -nb \
-    --wandb_entity "ucb-hcrl" \
-    --wandb_project "gdsampler" \
-    --wandb_group "counting_fmcad_hard" \
-    --wandb_tags "l2,logprob"
+# python src/run.py \
+#     -d "data/counting_bl/*" -b 10000 \
+#     --lr $lr --optimizer ${OPTIMIZER} \
+#     --num_steps 1000 \
+#     -nb \
+#     --wandb_entity "ucb-hcrl" \
+#     --wandb_project "gdsampler" \
+#     --wandb_group "counting_fmcad_blasted" \
+#     --wandb_tags "l2,logprob"
+
+# python src/run.py \
+#     -d "data/counting_hard/*" -b 1000 \
+#     --lr $lr --optimizer ${OPTIMIZER} \
+#     --num_steps 1000 \
+#     -nb \
+#     --wandb_entity "ucb-hcrl" \
+#     --wandb_project "gdsampler" \
+#     --wandb_group "counting_fmcad_hard" \
+#     --wandb_tags "l2,logprob"
 
 # python src/run.py \
 #     -d "data/counting2/blasted*" -b 10000 \
