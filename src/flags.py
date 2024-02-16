@@ -43,12 +43,6 @@ def parse_args():
     parser.add_argument(
         "--optimizer", type=str, default="adam", help="what optimizer to use"
     )
-
-    parser.add_argument(
-        "--single_device",
-        action="store_true",
-        help="Whether to use single gpu, i.e. by default use all available devices",
-    )
     # experiment util parameters
     parser.add_argument(
         "--use_cpu",

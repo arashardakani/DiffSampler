@@ -16,40 +16,74 @@ def gdsolve_verbose(
     params: optax.Params,
     optimizer: optax.GradientTransformation,
     literal_tensor: jnp.ndarray,
-    gradient_mask: jnp.ndarray,
     num_steps: int,
     do_wandb: bool = True,
     wandb_init_config: dict = None,
 ) -> optax.Params:
 
+    def compute_clause_tensor(
+        params: jnp.ndarray,
+        literal_tensor: jnp.ndarray,
+    ) -> jnp.ndarray:
+        params = jax.nn.sigmoid(params)
+        x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
+        x = jnp.where(literal_tensor > 0, x, 1 - x)
+        return x
+
+    # tmp = torch.concat(
+    #     [
+    #         torch.ones(input.shape[0], input.shape[1], 1, device=input.device),
+    #         torch.cumprod(input, dim=-1)[:, :, :-1],
+    #     ],
+    #     dim=-1,
+    # ) * torch.concat(
+    #     [
+    #         torch.flip(torch.cumprod(torch.flip(input, [2]), dim=-1), [2])[:, :, 1:],
+    #         torch.ones(input.shape[0], input.shape[1], 1, device=input.device),
+    #     ],
+    #     dim=-1,
+    # )
+
+    @jax.custom_vjp
     def compute_loss(
+        x: jnp.ndarray,
+    ):
+        rounded_x = jnp.round(x)
+        # return jnp.log(jnp.sum(jnp.square(x), axis=-1) + 1e-10).sum() # TODO: USE THIS TO TURN ON OFF taking LOG of loss to boost gradient scale
+        return jnp.square(jnp.prod(rounded_x, axis=-1)).sum()
+
+    def compute_loss_fwd(x):
+        return compute_loss(x), x
+
+    def compute_loss_bwd(old_x, g):
+        import pdb; pdb.set_trace()
+        return old_x * g
+
+    compute_loss.defvjp(compute_loss_fwd, compute_loss_bwd)
+
+    def forward_pass(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        # params = jnp.clip(params, -7.5, 7.5)
-        params = jax.nn.sigmoid(params)
-        x = jnp.take(params, jnp.abs(literal_tensor)-1, fill_value=1.0, axis=1)
-        x = jnp.where(literal_tensor > 0, x, 1 - x)
-        x = jnp.prod(x, axis=-1)
-        # return jnp.log(jnp.sum(jnp.square(x), axis=-1) + 1e-10).sum() # TODO: USE THIS TO TURN ON OFF taking LOG of loss to boost gradient scale
-        return jnp.square(x).sum()
+        clause_tensor = compute_clause_tensor(params, literal_tensor)
+        return compute_loss(clause_tensor)
 
-    def compute_loss_logging(
-        params: jnp.ndarray,
-        literal_tensor: jnp.ndarray,
-    ):  
-        params = jax.nn.sigmoid(params)
-        x = jnp.take(params, jnp.abs(literal_tensor)-1, fill_value=1.0, axis=1)
-        x = jnp.where(literal_tensor > 0, x, 1 - x)
-        x = jnp.prod(x, axis=-1)
-        return jnp.square(x)
+    # def compute_loss_logging(
+    #     params: jnp.ndarray,
+    #     literal_tensor: jnp.ndarray,
+    # ):
+    #     params = jax.nn.sigmoid(params)
+    #     x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
+    #     x = jnp.where(literal_tensor > 0, x, 1 - x)
+    #     x = jnp.prod(x, axis=-1)
+    #     return jnp.square(x)
 
     @functools.partial(jax.pmap, in_axes=(0, None), axis_name="num_devices")
     def backward_pass(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        loss, grads = jax.value_and_grad(compute_loss)(params, literal_tensor)
+        loss, grads = jax.value_and_grad(forward_pass)(params, literal_tensor)
         full_loss = compute_loss_logging(params, literal_tensor)
         return loss, grads, full_loss
 
@@ -58,11 +92,10 @@ def gdsolve_verbose(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
-        gradient_mask: jnp.ndarray,
     ):
-        l = compute_loss(params[0], literal_tensor)
+        l =forward_pass(params[0], literal_tensor)
         loss, grads, full_loss = backward_pass(params, literal_tensor)
-        grads = grads * (1 - gradient_mask)
+
         updates, opt_state = optimizer.update(grads.mean(axis=0), opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss, grads, full_loss
@@ -72,7 +105,7 @@ def gdsolve_verbose(
         assignment: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        sat = jnp.take(assignment, jnp.abs(literal_tensor)-1, fill_value=1, axis=1)
+        sat = jnp.take(assignment, jnp.abs(literal_tensor), fill_value=1, axis=1)
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         sat = jnp.all(jnp.any(sat > 0, axis=2), axis=1)
         satisfying_row_indices = jnp.where(
@@ -105,23 +138,16 @@ def gdsolve_verbose(
     opt_state = optimizer.init(params)
     if do_wandb:
         wandb.init(**wandb_init_config)
-    # for step in tqdm(range(num_steps), desc="Gradient Descent"):
-    print(f"params: {params[0, 0, 0:10]}")
-    for step in range(num_steps):
+    for step in tqdm(range(num_steps), desc="Gradient Descent"):
         params, opt_state, loss_values, grads, full_loss = backprop_step(
             params=params,
             opt_state=opt_state,
             literal_tensor=literal_tensor,
-            gradient_mask=gradient_mask,
         )
         if step % solution_log_interval == 0:
             solutions = get_solutions(params, literal_tensor)
             solution_count = len(solutions)
-            # logging.info(f"Step {step}: {solution_count} solutions")
-            # logging.info(f"Loss: {loss_values.sum()}")
-        print(f"Step {step}: {solution_count} solutions")
-        print(f"Loss: {loss_values.sum()}")
-        print(f"params: {params[0, 0, 0:10]}")
+
         loss_value = loss_values.sum()
         scaled_loss = jnp.log(jnp.exp(float(loss_value) / batch_size) * batch_size)
         grad_norm = float(jnp.linalg.norm(grads))
@@ -144,8 +170,7 @@ def gdsolve_verbose(
         wandb.finish()
     all_losses = np.stack(loss_history)
     all_params = np.stack(parameter_history)
-    solutions = get_solutions(params, literal_tensor)
-    import sys; sys.exit()
+    solutions = solutions = get_solutions(params, literal_tensor)
     return (
         params,
         step + 1,

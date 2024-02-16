@@ -18,7 +18,7 @@ import wandb
 import flags
 
 # import model.circuit_jax as circuit
-from model.circuit_multigpu import init_problem
+from model.initlialize_sat_prob import init_problem
 from model.gdsolve import gdsolve
 from model.gdsolve_verbose import gdsolve_verbose
 
@@ -38,26 +38,30 @@ class Runner(object):
                 "\n".join([f"{k}: {v}" for k, v in self.args.__dict__.items()])
             )
 
+        # set random seed
         random.seed(self.args.seed)
         self.key = jax.random.PRNGKey(self.args.seed)
 
+        # setup the dataset
         self.datasets = []
         self.dataset_str = ""
         self._setup_problems()
 
+        # setup the save directory
         self.save_dir = pathlib.Path(__file__).parent.parent / "results"
-        self.save_dir = (
-            self.save_dir
-            / (f"{self.dataset_str}_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}_{datetime.now().strftime('%Y%m%d')}"
+        self.save_dir = self.save_dir / (
+            f"{self.dataset_str}_{self.args.batch_size}_{self.args.optimizer}_{self.args.learning_rate}_{datetime.now().strftime('%Y%m%d')}"
             + "_latency"
             if self.args.latency_experiment
-            else "_logging")
+            else "_logging"
         )
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
 
+        # use CPU if specified
         if self.args.use_cpu:
             jax.config.update("jax_platform_name", "cpu")
 
+        # setup wandb
         self.do_wandb = (
             self.args.wandb_entity is not None
             and not self.args.latency_experiment
@@ -112,13 +116,12 @@ class Runner(object):
         else:
             wandb_init_config = {}
         solutions_found = []
-        params, optimizer, literal_tensor = init_problem(
+        params, optimizer, literal_tensor, gradient_mask = init_problem(
             cnf_problem=problem,
             batch_size=self.args.batch_size,
             key=self.key,
             learning_rate=self.args.learning_rate,
             optimizer_str=self.args.optimizer,
-            single_device=self.args.single_device,
         )
         log_dict = {}
         result_dict = {}
@@ -134,6 +137,7 @@ class Runner(object):
                 params=params,
                 optimizer=optimizer,
                 literal_tensor=literal_tensor,
+                gradient_mask=gradient_mask,
             )
         else:
             (
@@ -150,6 +154,7 @@ class Runner(object):
                 params=params,
                 optimizer=optimizer,
                 literal_tensor=literal_tensor,
+                gradient_mask=gradient_mask,
                 do_wandb=self.do_wandb,
                 wandb_init_config=wandb_init_config,
             )
@@ -253,10 +258,10 @@ class Runner(object):
             self.run(prob_id=prob_id)
 
     def export_result(self, result_dict, prob_id):
-        """Export results to a file."""
+        """Export SAT solving results to a file."""
         filename = os.path.join(self.save_dir / self.problem_name, "results.csv")
         df = pd.DataFrame.from_dict(results_dict)
-        df = df.transpose()
+        df = df.transpose() 
         df.to_csv(filename, sep="\t", index=False)
 
     def export_vector(self, stacked_vector, prob_id, tag="emb"):

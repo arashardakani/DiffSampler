@@ -16,6 +16,7 @@ def gdsolve(
     params: optax.Params,
     optimizer: optax.GradientTransformation,
     literal_tensor: jnp.ndarray,
+    gradient_mask: jnp.ndarray,
     num_steps: int,
 ) -> optax.Params:
     """for runtime measurement"""
@@ -25,7 +26,7 @@ def gdsolve(
         assignment: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        sat = jnp.take(assignment, jnp.abs(literal_tensor), fill_value=1, axis=1)
+        sat = jnp.take(assignment, jnp.abs(literal_tensor) - 1, fill_value=1, axis=1)
         sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
         sat = jnp.all(jnp.any(sat > 0, axis=2), axis=1)
         satisfying_row_indices = jnp.where(
@@ -53,10 +54,7 @@ def gdsolve(
         literal_tensor: jnp.ndarray,
     ):
         params = jax.nn.sigmoid(params)
-        # hard value forward propagation 
-        # clip values to 0 or 1
-        params = (params > 0.5).astype(float)
-        x = jnp.take(params, jnp.abs(literal_tensor), fill_value=1.0, axis=1)
+        x = jnp.take(params, jnp.abs(literal_tensor) - 1, fill_value=1.0, axis=1)
         x = jnp.where(literal_tensor > 0, x, 1 - x)
         x = jnp.prod(x, axis=-1)
         return jnp.square(x).sum()
@@ -74,6 +72,7 @@ def gdsolve(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
+        gradient_mask: jnp.ndarray,
     ):
         loss_value, grads = backward_pass(params, literal_tensor)
         updates, opt_state = optimizer.update(grads.mean(axis=0), opt_state)
@@ -87,6 +86,7 @@ def gdsolve(
             params=params,
             opt_state=opt_state,
             literal_tensor=literal_tensor,
+            gradient_mask=gradient_mask,
         )
     end_t = time.time()
     solutions = jnp.unique(get_solutions(params, literal_tensor), axis=1)
