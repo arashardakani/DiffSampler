@@ -92,9 +92,10 @@ def gdsolve_verbose(
         literal_tensor: jnp.ndarray,
     ):
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
+        assignment = np.unique(assignment, axis=1)
         solution_mask = scan_sat_solutions(assignment, literal_tensor)
         solutions = assignment[solution_mask]
-        return np.unique(solutions, axis=0)
+        return solutions
 
     # literal_tensor_sharded = jnp.stack([literal_tensor]*num_devices)
     log_dict = {"loss": [], "scaled_loss": [], "grad_norm": [], "solution_count": []}
@@ -139,6 +140,7 @@ def gdsolve_verbose(
         if do_log_all:
             parameter_history.append(jax.nn.sigmoid(params[:, 0, :]))
             loss_history.append(full_loss[0])
+    import pdb; pdb.set_trace()
     if do_wandb:
         wandb.finish()
     if do_log_all:
