@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import pdb
-#import matplotlib.pyplot as plt
-#import seaborn as sns
+
+# import matplotlib.pyplot as plt
+# import seaborn as sns
 import math
 from torch.nn import Parameter
 import torch.nn.functional as F
@@ -10,12 +11,13 @@ import numpy as np
 from torch.autograd import Variable
 import math
 
+
 class AND(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(1.)
-        self.dense.bias.data.fill_(-1. * num_in + 1.)
+        self.dense.weight.data.fill_(1.0)
+        self.dense.bias.data.fill_(-1.0 * num_in + 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -32,8 +34,8 @@ class OR(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(1.)
-        self.dense.bias.data.fill_(1. * num_in - 1.)
+        self.dense.weight.data.fill_(1.0)
+        self.dense.bias.data.fill_(1.0 * num_in - 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -44,15 +46,14 @@ class OR(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class NOT(nn.Module):
     def __init__(self):
         super().__init__()
         self.dense = nn.Linear(1, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(0.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(0.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -62,16 +63,14 @@ class NOT(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
-
 
 
 class NOR(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(-1. * num_in + 1.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(-1.0 * num_in + 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -82,15 +81,14 @@ class NOR(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class NAND(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data.fill_(-1.)
-        self.dense.bias.data.fill_(1. * num_in - 1.)
+        self.dense.weight.data.fill_(-1.0)
+        self.dense.bias.data.fill_(1.0 * num_in - 1.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
         self.Amp = Amp()
@@ -101,7 +99,6 @@ class NAND(nn.Module):
         output = self.dense(input)
         output = self.activation.apply(output)
         return output
-
 
 
 class XNOR(nn.Module):
@@ -114,7 +111,7 @@ class XNOR(nn.Module):
     def forward(self, input):
         output1 = self.AND(input)
         output2 = self.NOR(input)
-        output = self.OR(torch.concat([output1,output2], dim=-1))
+        output = self.OR(torch.concat([output1, output2], dim=-1))
         return output
 
 
@@ -128,20 +125,21 @@ class XOR(nn.Module):
     def forward(self, input):
         output1 = self.OR(input)
         output2 = self.NAND(input)
-        output = self.AND(torch.concat([output1,output2], dim=-1))
+        output = self.AND(torch.concat([output1, output2], dim=-1))
         return output
+
 
 class bin2dec(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.dense = nn.Linear(num_in, 1)
-        self.dense.weight.data = torch.pow(2.,torch.arange(0,num_in))
-        self.dense.bias.data.fill_(0.)
+        self.dense.weight.data = torch.pow(2.0, torch.arange(0, num_in))
+        self.dense.bias.data.fill_(0.0)
         self.dense.weight.requires_grad = False
         self.dense.bias.requires_grad = False
 
     def forward(self, input):
-        output = self.dense((input+1.)/2.)
+        output = self.dense((input + 1.0) / 2.0)
         return output
 
 
@@ -166,11 +164,11 @@ class FAdder(nn.Module):
 
     def forward(self, input, C_in):
         output1 = self.XOR1(input)
-        output = self.XOR2(torch.concat([output1,C_in], dim=-1))
+        output = self.XOR2(torch.concat([output1, C_in], dim=-1))
         output3 = self.AND1(input)
-        output4 = self.AND2(torch.concat([output1,C_in], dim=-1))
+        output4 = self.AND2(torch.concat([output1, C_in], dim=-1))
 
-        C_out = self.OR(torch.concat([output3,output4], dim=-1))
+        C_out = self.OR(torch.concat([output3, output4], dim=-1))
         return output, C_out
 
 
@@ -179,15 +177,25 @@ class Adder(nn.Module):
         super().__init__()
         self.items = []
         self.num_in = num_in
-        self.layer = nn.ModuleList([FAdder()for _ in range(num_in)])
+        self.layer = nn.ModuleList([FAdder() for _ in range(num_in)])
 
     def forward(self, input1, input2):
-        S = torch.ones_like(input1).to(input1.device) * -1.
+        S = torch.ones_like(input1).to(input1.device) * -1.0
         for i, layer_module in enumerate(self.layer):
             if i == 0:
-                S[:,0], C = layer_module(torch.concat([input1[:,0].unsqueeze(1), input2[:,0].unsqueeze(1)], dim=-1), -1. * torch.ones(1,1).to(input1.device))
+                S[:, 0], C = layer_module(
+                    torch.concat(
+                        [input1[:, 0].unsqueeze(1), input2[:, 0].unsqueeze(1)], dim=-1
+                    ),
+                    -1.0 * torch.ones(1, 1).to(input1.device),
+                )
             else:
-                S[:,i], C = layer_module(torch.concat([input1[:,i].unsqueeze(1), input2[:,i].unsqueeze(1)], dim=-1), C)
+                S[:, i], C = layer_module(
+                    torch.concat(
+                        [input1[:, i].unsqueeze(1), input2[:, i].unsqueeze(1)], dim=-1
+                    ),
+                    C,
+                )
         return S, C
 
 
@@ -196,25 +204,34 @@ class PAND(nn.Module):
         super().__init__()
         self.items = []
         self.num_in = num_in
-        self.layer = nn.ModuleList([AND(2)for _ in range(num_in)])
+        self.layer = nn.ModuleList([AND(2) for _ in range(num_in)])
 
     def forward(self, input1, input2):
         S = torch.zeros_like(input1).to(input1.device)
         for i, layer_module in enumerate(self.layer):
-            S[:,i] = layer_module(torch.concat([input1[:,i].unsqueeze(1), input2[:,i].unsqueeze(1)], dim=-1))
+            S[:, i] = layer_module(
+                torch.concat(
+                    [input1[:, i].unsqueeze(1), input2[:, i].unsqueeze(1)], dim=-1
+                )
+            )
         return S
+
 
 class POR(nn.Module):
     def __init__(self, num_in):
         super().__init__()
         self.items = []
         self.num_in = num_in
-        self.layer = nn.ModuleList([OR(2)for _ in range(num_in)])
+        self.layer = nn.ModuleList([OR(2) for _ in range(num_in)])
 
     def forward(self, input1, input2):
         S = torch.zeros_like(input1).to(input1.device)
         for i, layer_module in enumerate(self.layer):
-            S[:,i] = layer_module(torch.concat([input1[:,i].unsqueeze(1), input2[:,i].unsqueeze(1)], dim=-1))
+            S[:, i] = layer_module(
+                torch.concat(
+                    [input1[:, i].unsqueeze(1), input2[:, i].unsqueeze(1)], dim=-1
+                )
+            )
         return S
 
 
@@ -223,26 +240,27 @@ class Multiplier(nn.Module):
         super().__init__()
         self.items = []
         self.num_in = num_in
-        self.adders = nn.ModuleList([Adder(num_in)for _ in range(num_in-1)])
-        self.ands = nn.ModuleList([PAND(num_in)for _ in range(num_in)])
-
+        self.adders = nn.ModuleList([Adder(num_in) for _ in range(num_in - 1)])
+        self.ands = nn.ModuleList([PAND(num_in) for _ in range(num_in)])
 
     def forward(self, input1, input2):
         S = torch.zeros(input1.size()[0], self.num_in * 2).to(input1.device)
         for i, layer_module in enumerate(self.ands):
             if i == 0:
-                tmp = layer_module( input1, input2[:,i].repeat(1,self.num_in))
-                S[:,i] = tmp[:,0]
-                partial1 = torch.concat([tmp[:,1:], torch.ones(1,1).to(input1.device)* -1.], dim = -1)
+                tmp = layer_module(input1, input2[:, i].repeat(1, self.num_in))
+                S[:, i] = tmp[:, 0]
+                partial1 = torch.concat(
+                    [tmp[:, 1:], torch.ones(1, 1).to(input1.device) * -1.0], dim=-1
+                )
             else:
-                partial2 = layer_module( input1, input2[:,i].repeat(1,self.num_in))
+                partial2 = layer_module(input1, input2[:, i].repeat(1, self.num_in))
 
-                tmp, C = self.adders[i-1](partial1, partial2)
+                tmp, C = self.adders[i - 1](partial1, partial2)
 
-                S[:,i] = tmp[:,0]
+                S[:, i] = tmp[:, 0]
 
-                partial1 = torch.concat([tmp[:,1:], C], dim = -1)
-        S[:,i+1:] = partial1
+                partial1 = torch.concat([tmp[:, 1:], C], dim=-1)
+        S[:, i + 1 :] = partial1
         return S
 
 
@@ -257,9 +275,9 @@ class MUX2(nn.Module):
         self.NOT = NOT()
 
     def forward(self, input1, input2, sel):
-        out1 = self.AND1(input1, self.NOT(sel).repeat(1,self.num_in))
-        out2 = self.AND2(input2, sel.repeat(1,self.num_in))
-        out = self.OR(out1, out2)        
+        out1 = self.AND1(input1, self.NOT(sel).repeat(1, self.num_in))
+        out2 = self.AND2(input2, sel.repeat(1, self.num_in))
+        out = self.OR(out1, out2)
         return out
 
 
@@ -272,18 +290,21 @@ class MUX(nn.Module):
         self.num_port = num_port
         ports = num_port
         for i in range(int(math.log2(num_port))):
-            ports = int(ports/2)
-            self.layer[i] = nn.ModuleList([MUX2(num_in)for _ in range(ports)])
-            
+            ports = int(ports / 2)
+            self.layer[i] = nn.ModuleList([MUX2(num_in) for _ in range(ports)])
 
     def forward(self, input, sel):
         out = {}
         for i in range(int(math.log2(self.num_port))):
             for t, layer_module in enumerate(self.layer[i]):
                 if i == 0:
-                    out[t] = layer_module(input[2*t], input[2*t+1], sel[:,0].unsqueeze(1))
+                    out[t] = layer_module(
+                        input[2 * t], input[2 * t + 1], sel[:, 0].unsqueeze(1)
+                    )
                 else:
-                    out[t] = layer_module(out[2*t], out[2*t+1], sel[:,i].unsqueeze(1))
+                    out[t] = layer_module(
+                        out[2 * t], out[2 * t + 1], sel[:, i].unsqueeze(1)
+                    )
         return out[0]
 
 
@@ -298,10 +319,7 @@ class Sgn(torch.autograd.Function):
     def backward(ctx, grad_output):
         input = ctx.saved_tensors
         grad_input = grad_output.clone()
-        return grad_input #* (1 - torch.nn.functional.tanh(input[0]+0.1*torch.randn(1).to(input[0].device))**2)
-
-
-
+        return grad_input  # * (1 - torch.nn.functional.tanh(input[0]+0.1*torch.randn(1).to(input[0].device))**2)
 
 
 class Amp(torch.autograd.Function):
@@ -314,7 +332,7 @@ class Amp(torch.autograd.Function):
     def backward(ctx, grad_output):
         input = ctx.saved_tensors
         grad_input = grad_output.clone()
-        return grad_input * torch.sigmoid(grad_input.sign() * input[0] + 2.)
+        return grad_input * torch.sigmoid(grad_input.sign() * input[0] + 2.0)
 
 
 class dec2binconversion(torch.autograd.Function):
@@ -327,13 +345,5 @@ class dec2binconversion(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         num_in = ctx.saved_tensors[0]
-        
-        return (grad_output * torch.pow(2.,torch.arange(0,num_in))).sum()
 
-
-
-
-
-
-
-
+        return (grad_output * torch.pow(2.0, torch.arange(0, num_in))).sum()

@@ -13,7 +13,7 @@ def parse_args():
         help="Path to dataset",
     )
     parser.add_argument(
-        "--seed", type=int, default=42, help="random seed for initialization"
+        "--seed", type=int, default=10, help="random seed for initialization"
     )
     parser.add_argument(
         "--use_pgates", type=bool, default=True, help="Whether to use pgates or not"
@@ -67,24 +67,29 @@ def parse_args():
         help="Whether to dump solution or not",
     )
     parser.add_argument(
-        "--baseline_name",
-        "-bn",
-        type=str,
-        default="m22",
-        help="Baseline solver names, comma separated",
-    )
-    parser.add_argument(
-        "--baseline_only",
-        "-bo",
+        "--dump_all",
         action="store_true",
-        help="Whether to run baseline solvers only",
+        help="Whether to dump all losses and soft assignement (embeddings)",
     )
-    parser.add_argument(
-        "--no_baseline",
-        "-nb",
-        action="store_true",
-        help="Whether to run baseline solvers",
-    )
+    # parser.add_argument(
+    #     "--baseline_name",
+    #     "-bn",
+    #     type=str,
+    #     default="m22",
+    #     help="Baseline solver names, comma separated",
+    # )
+    # parser.add_argument(
+    #     "--baseline_only",
+    #     "-bo",
+    #     action="store_true",
+    #     help="Whether to run baseline solvers only",
+    # )
+    # parser.add_argument(
+    #     "--no_baseline",
+    #     "-nb",
+    #     action="store_true",
+    #     help="Whether to run baseline solvers",
+    # )
 
     parser.add_argument(
         "--debug",

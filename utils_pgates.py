@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import pdb
-#import matplotlib.pyplot as plt
-#import seaborn as sns
+
+# import matplotlib.pyplot as plt
+# import seaborn as sns
 import math
 from torch.nn import Parameter
 import torch.nn.functional as F
@@ -16,7 +17,7 @@ class AND(nn.Module):
         self.activation = Sgn()
 
     def forward(self, input):
-        output = torch.prod(input, dim = -1).unsqueeze(-1)
+        output = torch.prod(input, dim=-1).unsqueeze(-1)
         return output
 
 
@@ -25,9 +26,8 @@ class OR(nn.Module):
         super().__init__()
 
     def forward(self, input):
-        output = 1 - torch.prod(1 - input, dim = -1).unsqueeze(-1)
+        output = 1 - torch.prod(1 - input, dim=-1).unsqueeze(-1)
         return output
-
 
 
 class NOT(nn.Module):
@@ -39,16 +39,13 @@ class NOT(nn.Module):
         return output
 
 
-
-
 class NOR(nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, input):
-        output = torch.prod(1-input, dim = -1)
+        output = torch.prod(1 - input, dim=-1)
         return output
-
 
 
 class NAND(nn.Module):
@@ -56,9 +53,8 @@ class NAND(nn.Module):
         super().__init__()
 
     def forward(self, input):
-        output = 1 - torch.prod(input, dim = -1)
+        output = 1 - torch.prod(input, dim=-1)
         return output
-
 
 
 class XNOR(nn.Module):
@@ -71,7 +67,7 @@ class XNOR(nn.Module):
     def forward(self, input):
         output1 = self.AND(input)
         output2 = self.NOR(input)
-        output = self.OR(torch.concat([output1,output2], dim=-1))
+        output = self.OR(torch.concat([output1, output2], dim=-1))
         return output
 
 
@@ -85,7 +81,7 @@ class XOR(nn.Module):
     def forward(self, input):
         output1 = self.OR(input)
         output2 = self.NAND(input)
-        output = self.AND(torch.concat([output1,output2], dim=-1))
+        output = self.AND(torch.concat([output1, output2], dim=-1))
         return output
 
 
@@ -93,32 +89,21 @@ class Sgn(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
-        out = torch.sign(input*2.-1)
-        return (out + 1.)/2.
+        out = torch.sign(input * 2.0 - 1)
+        return (out + 1.0) / 2.0
 
     @staticmethod
     def backward(ctx, grad_output):
         input = ctx.saved_tensors
         grad_input = grad_output.clone()
-        #grad_input[input[0].gt(1)] = 0
-        #grad_input[input[0].lt(-1)] = 0
-        
-        #print(grad_input)
+        # grad_input[input[0].gt(1)] = 0
+        # grad_input[input[0].lt(-1)] = 0
+
+        # print(grad_input)
         return grad_input
 
 
-
-
-
-
-
-
-
-
-
-
-
-'''class ILSLinearFunction(torch.autograd.Function):
+"""class ILSLinearFunction(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input: torch.Tensor, weight: torch.nn.Parameter, cache, compute, Qflag):
@@ -428,4 +413,4 @@ class ILSsoftmax_matmulFunction(torch.autograd.Function):
         return grad_input1, grad_input2 
 
 
-ILSsoftmax_matmul = ILSsoftmax_matmulFunction.apply'''
+ILSsoftmax_matmul = ILSsoftmax_matmulFunction.apply"""
