@@ -92,14 +92,7 @@ class Runner(object):
                 device=self.device,
             )
             self.clause_list = problem.clauses
-            #self.max_clause_len = max([len(clause) for clause in self.clause_list])
-            #self.flat_var_list = np.array([clause + [0] * (self.max_clause_len - len(clause)) for clause in self.clause_list]).tolist() #.flatten()
-            #self.input = torch.nn.parameter.Parameter(torch.IntTensor(self.flat_var_list),requires_grad = False)#.to(self.device)#[0:900000*self.max_clause_len]
-            #self.mask = torch.nn.parameter.Parameter(self.input < 0., requires_grad = False)
-            #self.input.abs_()
-            #self.input = torch.LongTensor(range(self.args.batch_size)).to(self.device)
-            self.target = torch.ones( len(problem.clauses), self.args.batch_size, requires_grad=False, device=self.device)
-            self.target1 = torch.ones( 1, self.args.batch_size, requires_grad=False, device=self.device)
+            self.target = torch.zeros( len(problem.clauses), self.args.batch_size, requires_grad=False, device=self.device)
             if self.args.loss_fn == "mse":
                 self.loss = MSELoss(reduction='sum')
                 self.loss_per_batch = MSELoss(reduction='none') 
@@ -125,7 +118,8 @@ class Runner(object):
                 #weight_decay=1e-4
             )
             ####self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimizer, start_factor = 0.5, end_factor=1.0, total_iters=self.args.num_epochs )
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=3000, gamma=0.8)
+            ###self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=3000, gamma=0.8)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max = int(self.args.num_epochs/10))
             self.results[prob_id] = {
                 "prob_desc": self.datasets[prob_id].split('/')[-1],
                 "num_vars": problem.nv,
@@ -137,12 +131,7 @@ class Runner(object):
             raise NotImplementedError
         self.model = torch.nn.DataParallel(self.model) #to(self.device)
         self.model.to(self.device)
-        ##self.model.load_state_dict(torch.load('./model.py'))
-        ##torch.save(self.model.module.emb.embeddings.data, './emb_weight.npy')
-        #self.input.to(self.device)
-        #self.mask.to(self.device)
         self.target.to(self.device)
-        self.target1.to(self.device)
         self.epochs_ran = 0
 
 
@@ -170,82 +159,17 @@ class Runner(object):
         #self.model.module.input = self.model.module.input[100:1000, :]
 
         target = self.target
-        chunk_size = 5000000000
-        end_point = self.model.module.input.shape[0] #len(self.clause_list) #self.input.shape[0]
-        num_gradient_accumulation_steps = int(end_point/chunk_size) + 1
-        marker = 0
-        parts = []
-        for j in range(num_gradient_accumulation_steps):
-            if j == (num_gradient_accumulation_steps - 1):
-                marker = end_point
-            else:
-                marker += chunk_size
-            parts.append(marker)
         for epoch in train_loop:
-            '''self.model.train()
-            self.optimizer.zero_grad()z
-            outputs = self.model(0, end_point)
-            loss = self.loss(outputs.permute(1,0), target.permute(1,0)[:,:])
+            #self.model.module.input = self.model.module.input[torch.randperm(self.model.module.input.shape[0])]
+            outputs = self.model()
+            loss = self.loss(outputs.permute(1,0), target[0:outputs.size()[0], 0:outputs.size()[1]].permute(1,0)) 
+            #print(loss)
             loss.backward()
             self.optimizer.step()
-            self.optimizer.zero_grad()'''
-            self.model.module.input = self.model.module.input[torch.randperm(self.model.module.input.shape[0])]
-            #print(self.model.module.input)
-            if (epoch % 500) == 0:
-                cond = True
-            else:
-                cond = False
-            for j in range(num_gradient_accumulation_steps):
-                #print(torch.cuda.memory_reserved(0))
-                #print(torch.cuda.memory_allocated(0))
-                #outputs = self.model(self.input[chunk_size * j:parts[j], :].to(self.device), self.mask[chunk_size * j:parts[j], :].to(self.device))
-                outputs, AND_out, claus, z = self.model(chunk_size * j, parts[j], cond)
-                #print(outputs, target, self.target1)
-                loss2 = torch.nn.functional.mse_loss(AND_out.unsqueeze(0), self.target1) #* 100
-                loss1 = self.loss(outputs.permute(1,0), target.permute(1,0)[:,chunk_size * j:parts[j]]) 
-                loss3 = torch.nn.functional.binary_cross_entropy(AND_out.permute(1,0), target.permute(1,0)[:,chunk_size * j:parts[j]]) 
-                #print(outputs.permute(1,0), target.permute(1,0)[:,chunk_size * j:parts[j]])
-                #print(AND_out.unsqueeze(0), self.target1)
-                #print(loss1.shape)
-                loss = loss1 # + loss2
-                ##torch.save(outputs, './loss.npy')
-                #print(torch.cuda.memory_reserved(0))
-                #print(torch.cuda.memory_allocated(0))
-                loss.backward()
-                print(loss, loss3)
-                #print(self.model.module.emb.embeddings.data.permute(1,0)[0, 630])
-                #print(loss1, loss2, loss)
-                #print(torch.cuda.memory_reserved(0))
-                #print(torch.cuda.memory_allocated(0))
-                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
-                self.optimizer.step()
-                self.model.train()
-                '''for param in self.model.parameters():
-                    print(param.grad.max(), param.grad.min())'''
-                self.optimizer.zero_grad()
-                #self.scheduler.step()
+            self.model.train()
+            self.optimizer.zero_grad()
             
-            '''self.scheduler.step()
-            self.optimizer.zero_grad()'''
-        #torch.save(self.model.state_dict(), './model.py')
-        #torch.save(self.model.module.emb.embeddings.data, './emb_weight1.npy')
-        
-        '''print(torch.argwhere(outputs > 0.4)[:,0])
-        print(torch.nn.functional.embedding(torch.argwhere(outputs > 0.4)[:,0], claus[0,:,:]))
-        print(torch.nn.functional.embedding(torch.argwhere(outputs > 0.4)[:,0], z))
-        #print(self.model.module.emb.embeddings.data.permute(1,0).reshape(55,-1))
-
-        print(torch.index_select( outputs, 0, torch.argwhere(outputs > 0.4)[:,0]))
-        print(torch.argwhere(torch.abs (self.model.module.emb.embeddings.data.permute(1,0)) < 1.  ).shape)
-        print(torch.argwhere(torch.abs (self.model.module.emb.embeddings.data.permute(1,0)) > 4.  ).shape)
-        print(self.model.module.emb.embeddings.data.permute(1,0))
-        #print(self.model.module.emb.embeddings.data.permute(1,0).cpu().tolist())
-        print(torch.argwhere(torch.abs (self.model.module.emb.embeddings.data.permute(1,0)) < 0.5  ))'''
-        '''print(torch.argwhere(outputs < 0.75)[:,0], outputs.shape)
-        print(outputs.permute(1,0)[0,:].cpu().tolist(), torch.index_select( outputs, 0, torch.argwhere(outputs < 0.75)[:,0]) )
-        print(self.model.module.emb.embeddings.data.permute(1,0).cpu().tolist())
-        print(torch.argwhere(torch.abs (self.model.module.emb.embeddings.data.permute(1,0)) < 0.5  ))'''
-        return self.loss_per_batch(outputs.permute(1,0), target.permute(1,0)[:,chunk_size * j:parts[j]])
+        return self.loss_per_batch(outputs.permute(1,0), target[0:outputs.size()[0], 0:outputs.size()[1]].permute(1,0))
 
     def run_baseline(self, problem: CNF, prob_id: int = 0):
         """Run the baseline solver.
@@ -293,18 +217,17 @@ class Runner(object):
             solutions: list of solutions found by model
         """
         is_verified = False
+        NO_solutions = 0
         for i, solution in tqdm(enumerate(solutions), total=len(solutions)):
+            
             assignment = {i+1: solution[i] for i in range(len(solution))}
             is_verified = self._check_solution(problem, assignment)
-            # verifier = Solver(name='lgl', bootstrap_with=problem)
-            # for assignment in solution:
-            #     verifier.add_clause([assignment])
-            # is_verified = verifier.solve()
             if is_verified:
-                logging.info("Model solution verified")
-                break
+                NO_solutions += 1
             # verifier.delete()
-        if not is_verified:
+        if NO_solutions > 0:
+            logging.info(f"{NO_solutions} model solutions verified")
+        else:
             logging.info("No solution found")
         return is_verified
     
@@ -330,8 +253,9 @@ class Runner(object):
             losses = self.run_back_prop(train_loop)
         if self.args.loss_fn != 'ce':
             losses = torch.mean(losses, dim=1)
-        solutions  = torch.topk(1-losses, k=self.args.topk, dim=0).indices.tolist()
-        solutions_found = [self.model.module.get_input_weights(s) for s in solutions]
+        #solutions  = torch.topk(1-losses, k=self.args.topk, dim=0).indices.tolist()
+        solutions = torch.unique(self.model.module.get_input_weights(), dim = 0)
+        solutions_found = solutions.long().cpu().tolist()
         solutions_found = [[(-1)**(1-sol[i]) * (i+1) for i in range(len(sol))] for sol in solutions_found]
         self.results[prob_id].update(
             {
@@ -347,8 +271,6 @@ class Runner(object):
         problem = CNF(from_file=self.datasets[prob_id])
         # run NN model solving
         solutions_found = self.run_model(problem, prob_id)
-
-       
         # solver_solution = self.run_baseline(problem, prob_id)
         # is_verified = any([sol == solver_solution for sol in solutions_found])
         # if not is_verified:

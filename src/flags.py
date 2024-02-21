@@ -12,7 +12,7 @@ def parse_args():
         help="Path to dataset",
     )
     parser.add_argument(
-        "--seed", type=int, default=45, help="random seed for initialization"
+        "--seed", type=int, default=50, help="random seed for initialization"
     )
     parser.add_argument(
         "--use_pgates", type=bool, default=True, help="Whether to use pgates or not"
@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=100e0,
+        default=12.5e0,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
@@ -32,10 +32,10 @@ def parse_args():
         help="Total number of training epochs to perform.",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=1, help="Batch size per GPU/CPU for training."
+        "--batch_size", type=int, default=20000, help="Batch size per GPU/CPU for training."
     )
     parser.add_argument(
-        "--topk", type=int, default=1, help="Top k predictions to consider"
+        "--topk", type=int, default=10000, help="Top k predictions to consider"
     )
     parser.add_argument(
         "--loss_fn", type=str, default="mse", help="Which loss function to use"
