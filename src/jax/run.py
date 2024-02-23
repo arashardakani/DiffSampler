@@ -132,15 +132,17 @@ class SamplingRunner(object):
 
     def run(self, problem: CNF, problem_name: str, config_id: int = 0):
         """Run the experiment."""
-        logging.critical(f"Run: {problem_name}; config {config_id}")
+        experiment_str = self.generate_expr_name(problem_name=problem_name, config_id=config_id)
+        logging.critical(f"Run: {problem_name}; config {experiment_str}")
+        
         if self.do_wandb:
             wandb_init_config = {
                 "project": self.args.wandb_project,
                 "entity": self.args.wandb_entity,
-                "name": problem_name,
-                "id": problem_name + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "name": experiment_str,
+                "id": experiment_str + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "resume": "allow",
-                "group": self.args.wandb_group + f"_{problem_name}_{self.args.optimizer}"
+                "group": self.args.wandb_group + f"_{problem_name}_{self.args.optimizer}_"
                 + "_".join(self.args.wandb_tags.split(",")),
                 "tags": self.args.wandb_tags.split(","),
                 "config": self.wandb_config,
@@ -150,7 +152,6 @@ class SamplingRunner(object):
 
         # run the model for a given problem and configuration
         run_logs, model_results = self.run_model(problem=problem, config_id=config_id, wandb_init_config=wandb_init_config)
-        experiment_str = self.generate_expr_name(problem_name=problem_name, config_id=config_id)
         if not self.args.latency_experiment:
             self.export_logs(log_dict=run_logs, experiment_str=experiment_str)
         return model_results
