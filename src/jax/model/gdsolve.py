@@ -25,41 +25,30 @@ def gdsolve(
         assignment: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        sat = jnp.take(assignment, jnp.abs(literal_tensor)-1, fill_value=1, axis=1)
-        sat = jnp.where(literal_tensor > 0, 1 - sat, sat)
+        sat = jnp.take(assignment, jnp.abs(literal_tensor)-1, fill_value=0, axis=1)
+        sat = jnp.where(literal_tensor > 0, sat, 1-sat)
         sat = jnp.all(jnp.any(sat > 0, axis=2), axis=1)
-        satisfying_row_indices = jnp.where(
-            sat, jnp.arange(sat.shape[0]), sat.shape[0] + 1
-        )
-        return jnp.take(assignment, satisfying_row_indices, axis=0, fill_value=-1)
-
+        return sat
+    
     def get_solutions(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
-        if assignment.ndim == 2:
-            assignment = jnp.expand_dims(assignment, axis=0)
-        solutions = scan_sat_solutions(assignment, literal_tensor)
-        solutions = solutions.reshape((-1, solutions.shape[-1]))
-        # remove spurious solutions that are all -1's
-        pruned_solutions = jnp.take(
-            solutions, jnp.where(jnp.any(solutions >= 0, axis=1))[0], axis=0
-        )
-        return np.unique(pruned_solutions, axis=1)
+        assignment = np.unique(assignment, axis=0)
+        solution_mask = scan_sat_solutions(assignment, literal_tensor)
+        solutions = assignment[solution_mask]
+        return solutions
 
     def compute_loss(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
     ):
-        # params = params + jax.random.normal(jax.random.PRNGKey(0), params.shape) * 0.25
-        # params = jnp.clip(params, -3.5, 3.5)
-        # params = jax.nn.sigmoid(2*params)
-        params = jax.nn.sigmoid(params)
-        x = jnp.take(params, jnp.abs(literal_tensor) - 1, fill_value=1.0, axis=1)
-        x = jnp.where(literal_tensor > 0, x, 1 - x)
+        params = jax.nn.sigmoid(2*params)
+        x = jnp.take(params, jnp.abs(literal_tensor) - 1, fill_value=0.0, axis=1)
+        x = jnp.where(literal_tensor > 0, 1 - x, x)
         x = jnp.prod(x, axis=-1)
-        return jnp.square(x).sum(axis=-1).mean()
+        return jnp.square(x).sum(axis=-1).sum()
 
     @functools.partial(jax.pmap, in_axes=(0, None), axis_name="num_devices")
     def backward_pass(
@@ -83,11 +72,13 @@ def gdsolve(
     start_t = time.time()
     opt_state = optimizer.init(params)
     for step in range(num_steps):
+        params = jnp.clip(params, -3.5, 3.5)
         params, opt_state, loss_value = backprop_step(
             params=params,
             opt_state=opt_state,
             literal_tensor=literal_tensor,
         )
+        # print(step, loss_value)
     end_t = time.time()
-    solutions = jnp.unique(get_solutions(params, literal_tensor), axis=1)
+    solutions = get_solutions(params, literal_tensor)
     return params, step + 1, loss_value, end_t - start_t, solutions

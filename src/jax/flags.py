@@ -13,7 +13,7 @@ def parse_args():
         help="Path to dataset",
     )
     parser.add_argument(
-        "--seed", type=int, default=10, help="random seed for initialization"
+        "--seed", type=int, default=0, help="random seed for initialization"
     )
     parser.add_argument(
         "--use_pgates", type=bool, default=True, help="Whether to use pgates or not"
@@ -23,21 +23,28 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         "--lr",
-        type=float,
-        default=10e-1,
+        type=str,
+        default="1e0,1e1,5e1,1e2",
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
+        "--momentum",
+        type=str,
+        default="0.0,0.9,0.99",
+        help="Gradient descent momentum.",
+    )
+    parser.add_argument(
         "--num_steps",
-        type=int,
-        default=1000,
+        type=str,
+        #default="1000,2000,5000",
+        default="10,20,50",
         help="Total number of gradient descent steps to perform.",
     )
     parser.add_argument(
         "--batch_size",
         "-b",
-        type=int,
-        default=1,
+        type=str,
+        default="10,20,50",
         help="Batch size per GPU/CPU for training.",
     )
     parser.add_argument(

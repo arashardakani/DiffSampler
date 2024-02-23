@@ -39,22 +39,15 @@ def init_problem(
     cnf_problem: CNF,
     batch_size: int,
     key: jnp.ndarray = None,
-    learning_rate: float = 1.0,
-    optimizer_str: str = "sgd",
 ):
     
     start_time = time.time()
     num_devices = jax.local_device_count()
-    # if num_devices == 1:
-    #     var_embedding = jax.random.normal(key, (batch_size, cnf_problem.nv))
-    # else:
 
+    key, subkey = jax.random.split(key)
     var_embedding = (
         jax.random.normal(key, (num_devices, batch_size, cnf_problem.nv))
     )
-    # var_embedding = var_embedding.at[0].set([1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-    # var_embedding = var_embedding[None,:,:]
-    # find the maximum clause length
     max_clause_len = max([len(clause) for clause in cnf_problem.clauses])
     fill_value = cnf_problem.nv + 1
     # pad the clauses to be of the same length
@@ -65,7 +58,7 @@ def init_problem(
         ]
     )
     end_time = time.time()
-    print(f"Time taken to initialize problem: {end_time - start_time} seconds")
+    # print(f"Time taken to initialize problem: {end_time - start_time} seconds")
 
     start_time = time.time()
     all_excluded_vars = []
@@ -76,20 +69,31 @@ def init_problem(
             break
         literal_tensor = np.delete(literal_tensor, np.argwhere(np.isin(literal_tensor, single_clause_vars).sum(axis=-1) > 0), 0)
         literal_tensor[np.isin(literal_tensor, -1 * single_clause_vars)] = 0
+    
+    # for each excluded var, fill values in var_embedding to according 0 or 1 values
+    for var in all_excluded_vars:
+        abs_var = np.abs(var)
+        var_embedding = var_embedding.at[:,:, abs_var-1].set(3.5 - float(var < 0) * 7.0)
+    
     # swap all 0's to fill_value
     literal_tensor = np.where(literal_tensor == 0, fill_value, literal_tensor)
-    print(literal_tensor.shape)
     end_time = time.time()
-    print(f"Time taken to prune problem: {end_time - start_time} seconds")
-    # learning rate heuristic
-#    learning_rate = 0.1*(np.log(cnf_problem.nv * len(cnf_problem.clauses)))
- 
+    # print(f"Time taken to prune problem: {end_time - start_time} seconds")
+    # print(literal_tensor.shape)
+    # print(all_excluded_vars)
+    return var_embedding, literal_tensor, key
+
+def init_optimizer(
+    optimizer_str: str,
+    learning_rate: float,
+    momentum: float = 0.0,
+):
     if optimizer_str == "adamw":
         optimizer = optax.adamw(learning_rate=learning_rate)
     elif optimizer_str == "adam":
         optimizer = optax.adam(learning_rate=learning_rate)
     elif optimizer_str == "sgd":
-        optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.0)
+        optimizer = optax.sgd(learning_rate=learning_rate, momentum=momentum)
     else:
         raise NotImplementedError
-    return var_embedding, optimizer, literal_tensor
+    return optimizer
