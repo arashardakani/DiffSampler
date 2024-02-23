@@ -106,7 +106,7 @@ def gdsolve_verbose(
     log_dict = {"loss": [], "grad_norm": [], "solution_count": []}
     parameter_history = []
     loss_history = []
-    solution_log_interval = 100
+    solution_log_interval = num_steps//50
     solution_count = 0
     opt_state = optimizer.init(params)
     if do_wandb:
