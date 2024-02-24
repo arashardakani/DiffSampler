@@ -1,3 +1,4 @@
+
 from typing import Callable
 import logging
 import functools
@@ -36,7 +37,7 @@ def gdsolve_verbose(
     #     x = jnp.prod(x, axis=-1)
     #     # return jnp.log(jnp.sum(jnp.square(x), axis=-1) + 1e-10).sum() # TODO: USE THIS TO TURN ON OFF taking LOG of loss to boost gradient scale
     #     return x
-
+    
     def compute_loss(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
@@ -46,8 +47,8 @@ def gdsolve_verbose(
         x = jnp.where(literal_tensor > 0, 1 - x, x)
         x = jnp.prod(x, axis=-1)
         # return jnp.log(jnp.sum(jnp.square(x), axis=-1) + 1e-10).sum() # TODO: USE THIS TO TURN ON OFF taking LOG of loss to boost gradient scale
-        return jnp.square(x).sum(axis=-1).sum()
-
+        return jnp.square(x).sum()
+    
     def compute_loss_logging(
         params: jnp.ndarray,
         literal_tensor: jnp.ndarray,
@@ -64,21 +65,20 @@ def gdsolve_verbose(
         literal_tensor: jnp.ndarray,
     ):
         loss, grads = jax.value_and_grad(compute_loss)(params, literal_tensor)
-        full_loss = compute_loss_logging(params, literal_tensor)
-        return loss, grads, full_loss
+        #full_loss = compute_loss_logging(params, literal_tensor)
+        return loss, grads, 0
 
-    # @jax.jit
     def backprop_step(
         params: jnp.ndarray,
         opt_state: optax.OptState,
         literal_tensor: jnp.ndarray,
     ):
-        l = compute_loss(params[0], literal_tensor)
+        #l = compute_loss(params[0], literal_tensor)
         loss, grads, full_loss = backprop_step_pmap(params, literal_tensor)
         # grad_coeff = np.bincount(np.abs(literal_tensor).flatten(), minlength=params.shape[-1])[1:-1]
         # grad_coeff = 1 / np.where(grad_coeff==0, 1, grad_coeff)
         # updates, opt_state = optimizer.update(grads.mean(axis=0) * grad_coeff, opt_state)
-        updates, opt_state = optimizer.update(grads.mean(axis=0), opt_state)
+        updates, opt_state = optimizer.update(grads, opt_state)
 
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss, grads, full_loss
@@ -103,18 +103,18 @@ def gdsolve_verbose(
         solutions = assignment[solution_mask]
         return solutions
 
-    log_dict = {"loss": [], "grad_norm": [], "solution_count": []}
+    log_dict = {"loss": [], "scaled_loss":[], "grad_norm": [], "solution_count": []}
     parameter_history = []
     loss_history = []
-    solution_log_interval = num_steps//50
+    solution_log_interval = 100
     solution_count = 0
     opt_state = optimizer.init(params)
     if do_wandb:
         wandb.init(**wandb_init_config)
-    
+
+    batch_size = params.shape[0] * params.shape[1]
     for descent_step in range(num_steps):
-        # import pdb; pdb.set_trace()
-        prng_key, subkey = jax.random.split(prng_key)
+        #prng_key, subkey = jax.random.split(prng_key)
         # params += jax.random.normal(subkey, params.shape) * 0.25
         params = jnp.clip(params, -3.5, 3.5)
         params, opt_state, loss_values, grads, full_loss = backprop_step(
@@ -128,20 +128,20 @@ def gdsolve_verbose(
             solutions = get_solutions(params, literal_tensor)
             solution_count = len(solutions)
             # solution_count = get_solutions(params, literal_tensor)
-            # print(f"descent_step: {descent_step}, Loss: {loss_values.sum()}, GradNorm:{ float(jnp.linalg.norm(grads))}, GradVar: {float(jnp.var(grads))}, Solutions: {solution_count}")
+        #print(f"descent_step: {descent_step}, Loss: {loss_values.sum()}, GradNorm:{ float(jnp.linalg.norm(grads))}, GradVar: {float(jnp.var(grads))}, Solutions: {solution_count}")
         loss_value = float(loss_values.sum())
-        
+        scaled_loss = loss_value / float(batch_size)
         #scaled_loss = jnp.log(jnp.exp(float(loss_value) / batch_size) * batch_size)
         grad_norm = float(jnp.linalg.norm(grads))
         log_dict["loss"].append(loss_value)
-        # log_dict["scaled_loss"].append(scaled_loss)
+        log_dict["scaled_loss"].append(scaled_loss)
         log_dict["grad_norm"].append(grad_norm)
         log_dict["solution_count"].append(solution_count)
         if do_wandb:
             wandb.log(
                 {
                     "loss": loss_value,
-                    # "scaled_loss": scaled_loss,
+                    "scaled_loss": scaled_loss,
                     "grad_norm": grad_norm,
                     "solution_count": solution_count,
                 }
