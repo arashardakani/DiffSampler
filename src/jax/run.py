@@ -170,7 +170,7 @@ class SamplingRunner(object):
             problem = self.load_problem(prob_id)
             results_dict_list = []
             for config_id in range(len(self.configs)):
-                result_dict = self.configs[config_id]
+                result_dict = self.configs[config_id].copy()
                 model_results = self.run(problem=problem, problem_name=problem_name, config_id=config_id)
                 result_dict.update(model_results)
                 results_dict_list.append(result_dict)
@@ -261,7 +261,6 @@ class SamplingRunner(object):
             f"Elapsed Time: {elapsed_time:.6f} seconds" f" Ran for {steps_ran} steps"
         )
         num_solutions = len(solutions_found)
-        self.configs[config_id]["sol"] = num_solutions
         if num_solutions:
             logging.info("Model solution verified")
         else:
