@@ -96,7 +96,6 @@ class SamplingRunner(object):
                 "ns": ns,
                 "bs": bs,
                 "mom": m,
-                "sol": 0,
             }
             for lr in learning_rates
             for ns in num_steps

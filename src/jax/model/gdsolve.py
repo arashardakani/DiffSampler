@@ -60,7 +60,6 @@ def gdsolve(
         loss, grads = jax.value_and_grad(compute_loss)(params, literal_tensor)
         return loss, grads
 
-    @jax.jit
     def backprop_step(
         params: jnp.ndarray,
         opt_state: optax.OptState,
