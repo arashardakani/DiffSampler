@@ -40,7 +40,7 @@ class SamplingRunner(object):
         self.configs = []
         self._setup_experiment()
         # setup the save directory
-        self.save_dir = pathlib.Path(__file__).parent.parent.parent / "results"
+        self.save_dir = pathlib.Path(__file__).parent.parent.parent / f"results_{self.args.wandb_group}"
         save_dir_str = "{dataset}_{optimizer}_{timestamp}".format(
             dataset=self.dataset_str,
             optimizer=self.args.optimizer,
