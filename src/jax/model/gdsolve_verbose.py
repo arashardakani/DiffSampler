@@ -98,7 +98,10 @@ def gdsolve_verbose(
         literal_tensor: jnp.ndarray,
     ):
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
-        assignment = np.unique(assignment, axis=0)
+        import pdb; pdb.set_trace()
+        flattened_assignment = assignment.reshape(-1, assignment.shape[-1])
+        flattened_assignment = np.unique(flattened_assignment, axis=0)
+        assignment = flattened_assignment.reshape(assignment.shape)
         solution_mask = scan_sat_solutions(assignment, literal_tensor)
         solutions = assignment[solution_mask]
         return solutions

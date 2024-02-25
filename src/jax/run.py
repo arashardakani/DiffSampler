@@ -93,9 +93,10 @@ class SamplingRunner(object):
         self.configs = [
             {
                 "lr": lr,
-                "num_steps": ns,
-                "batch_size": bs,
-                "momentum": m,
+                "ns": ns,
+                "bs": bs,
+                "mom": m,
+                "sol": 0,
             }
             for lr in learning_rates
             for ns in num_steps
@@ -133,14 +134,17 @@ class SamplingRunner(object):
     def run(self, problem: CNF, problem_name: str, config_id: int = 0):
         """Run the experiment."""
         experiment_str = self.generate_expr_name(problem_name=problem_name, config_id=config_id)
+        config_str = "_".join(
+            [f"{k}={v}" for k, v in self.configs[config_id].items()]
+        )
         logging.critical(f"Run: {problem_name}; config {experiment_str}")
         
         if self.do_wandb:
             wandb_init_config = {
                 "project": self.args.wandb_project,
                 "entity": self.args.wandb_entity,
-                "name": experiment_str,
-                "id": experiment_str + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "name": f"{problem_name}_{config_str}",
+                "id": f"{problem_name}_{config_str}" + f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 "resume": "allow",
                 "group": self.args.wandb_group + f"_{problem_name}_{self.args.optimizer}_"
                 + "_".join(self.args.wandb_tags.split(",")),
@@ -197,9 +201,9 @@ class SamplingRunner(object):
         # unzip the configuration
         experiment_config_dict = self.configs[config_id]
         lr = float(experiment_config_dict["lr"])
-        num_steps = int(experiment_config_dict["num_steps"])
-        batch_size = int(experiment_config_dict["batch_size"])
-        momentum = float(experiment_config_dict["momentum"])
+        num_steps = int(experiment_config_dict["ns"])
+        batch_size = int(experiment_config_dict["bs"])
+        momentum = float(experiment_config_dict["mom"])
 
         params, literal_tensor, key = init_problem(
             cnf_problem=problem,
@@ -258,6 +262,7 @@ class SamplingRunner(object):
             f"Elapsed Time: {elapsed_time:.6f} seconds" f" Ran for {steps_ran} steps"
         )
         num_solutions = len(solutions_found)
+        self.configs[config_id]["sol"] = num_solutions
         if num_solutions:
             logging.info("Model solution verified")
         else:
