@@ -35,11 +35,10 @@ def gdsolve(
         literal_tensor: jnp.ndarray,
     ):
         assignment = (jax.nn.sigmoid(params) > 0.5).astype(int)
-        flattened_assignment = assignment.reshape(-1, assignment.shape[-1])
-        flattened_assignment = np.unique(flattened_assignment, axis=0)
-        assignment = flattened_assignment.reshape(assignment.shape)
         solution_mask = scan_sat_solutions(assignment, literal_tensor)
         solutions = assignment[solution_mask]
+        solutions = solutions.reshape(-1, solutions.shape[-1])
+        solutions = np.unique(solutions, axis=0)
         return solutions
 
     def compute_loss(
