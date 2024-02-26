@@ -2,16 +2,20 @@
 # Installation
 
 ```[bash]
-    pip install torch (for appropriate CUDA version)
+    # in your conda/virtualenv; assuming CUDA v.12
+    pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
     pip install numpy
     pip install tqdm
+    pip install python-sat
+    pip install wandb
 ```
 
-# run code
+# run experiment reproduction
 
 ```[bash]
-CUDA_VISIBLE_DEVICES=$GPU_ID python src/run.py --num_epochs 100 -v -l --dataset_path "data/flat30/*.cnf"
-CUDA_VISIBLE_DEVICES=$GPU_ID python src/run.py --num_epochs 100 -v -l --dataset_path "data/pigeon_hole/*.cnf"
+# from repo top-level
+./scripts/run_exp_or.sh adam/sgd
+./scripts/run_exp_blasted.sh adam/sgd
 ```
-
+Instructions are same across all benchmark subsets (or, blasted, tire, prod, modexp, hash).
 

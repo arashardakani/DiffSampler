@@ -88,9 +88,9 @@ class SamplingRunner(object):
         num_steps = self.args.num_steps.split(",")
         batch_sizes = self.args.batch_size.split(",")
         if self.args.optimizer == "adam":
-            b1 = self.args.b1.split(",")
-            b2 = self.args.b2.split(",")
-            momenta = [f"{b1},{b2}" for b1 in b1 for b2 in b2]
+            b1_list = self.args.b1.split(",")
+            b2_list = self.args.b2.split(",")
+            momenta = [f"{b1},{b2}" for b1 in b1_list for b2 in b2_list]
         elif self.args.optimizer == "sgd":
             momenta = self.args.momentum.split(",")
         else:
@@ -277,6 +277,9 @@ class SamplingRunner(object):
                 "model_runtime": elapsed_time,
                 "model_steps_ran": steps_ran,
                 "num_solutions": num_solutions,
+                "loss": loss,
+                "soln_tput": num_solutions / elapsed_time,
+                "execution_tput": steps_ran / elapsed_time,
             }
         )
         # TODO: add support for exporting raw solutions found

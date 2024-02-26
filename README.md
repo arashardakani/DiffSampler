@@ -1,14 +1,21 @@
-# HWverification
 
-You can run the code using:
+# Installation
 
-CUDA_VISIBLE_DEVICES=0 python -W ignore Circuit_adder.py
+```[bash]
+    # in your conda/virtualenv; assuming CUDA v.12
+    pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install numpy
+    pip install tqdm
+    pip install python-sat
+    pip install wandb
+```
 
+# run experiment reproduction
 
-The binary values are represented using -1 and 1. The index 0 in vectors denotes the LSB.
+```[bash]
+# from repo top-level
+./scripts/run_exp_or.sh adam/sgd
+./scripts/run_exp_blasted.sh adam/sgd
+```
+Instructions are same across all benchmark subsets (or, blasted, tire, prod, modexp, hash).
 
-
-
-To run the pigeon-hole problems:
-
-CUDA_VISIBLE_DEVICES=0 python php.py --cnf_name_or_path ../pigeon_hole_problems/pigeon_hole_4-SAT.cnf

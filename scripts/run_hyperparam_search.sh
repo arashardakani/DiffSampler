@@ -1,23 +1,12 @@
-python src/jax/run.py \
-    -d "data/blasted/*.cnf*" \
-    --optimizer "sgd" -l \
-    --lr "2e1,3e1,5e2" \
-    --num_steps "5000" \
-    --batch_size "2000" \
-    --momentum "0.0,0.9, 0.99" \
+OPTIMIZER=$1
+DEVICES=$2
+CUDA_VISIBLE_DEVICES=$DEVICES python src/jax/run.py \
+    -d "data/modexp-test/*.cnf*" -l\
+    --optimizer $OPTIMIZER\
+    --lr "1e-2,1e-1,1e0,1e1,1e2" \
+    --num_steps "2000" \
+    --batch_size "100" \
     --wandb_entity "ucb-hcrl" \
     --wandb_project "gdsampler" \
-    --wandb_group "hp_search" \
-    --wandb_tags "seed=0"
-
-python src/jax/run.py \
-    -d "data/prod/*.cnf*" -l \
-    --optimizer ${OPTIMIZER} \
-    --lr "1e1,1.2e1,2e1,3e1" \
-    --num_steps "10000" \
-    --batch_size "2000" \
-    --momentum "0.0,0.9" \
-    --wandb_entity "ucb-hcrl" \
-    --wandb_project "gdsampler" \
-    --wandb_group "hp_search" \
+    --wandb_group "hparam" \
     --wandb_tags "seed=0"
