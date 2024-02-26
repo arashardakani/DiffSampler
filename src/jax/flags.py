@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument(
         "--momentum",
         type=str,
-        default="0.9,0.99",
+        default="0.0,0.9,0.99",
         help="Gradient descent momentum. Only applicable for SGD and RMSprop.",
     )
     parser.add_argument(
