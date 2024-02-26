@@ -87,7 +87,14 @@ class SamplingRunner(object):
         learning_rates = self.args.learning_rate.split(",")
         num_steps = self.args.num_steps.split(",")
         batch_sizes = self.args.batch_size.split(",")
-        momenta = self.args.momentum.split(",")
+        if self.args.optimizer == "adam":
+            b1 = self.args.b1.split(",")
+            b2 = self.args.b2.split(",")
+            momenta = [f"{b1},{b2}" for b1 in b1 for b2 in b2]
+        elif self.args.optimizer == "sgd":
+            momenta = self.args.momentum.split(",")
+        else:
+            raise NotImplementedError
 
         # list of all combinations of configurations
         self.configs = [
@@ -202,7 +209,7 @@ class SamplingRunner(object):
         lr = float(experiment_config_dict["lr"])
         num_steps = int(experiment_config_dict["ns"])
         batch_size = int(experiment_config_dict["bs"])
-        momentum = float(experiment_config_dict["mom"])
+        momentum = experiment_config_dict["mom"] # note: is string
 
         params, literal_tensor, key = init_problem(
             cnf_problem=problem,

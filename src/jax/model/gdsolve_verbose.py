@@ -107,7 +107,7 @@ def gdsolve_verbose(
     log_dict = {"loss": [], "scaled_loss":[], "grad_norm": [], "solution_count": []}
     parameter_history = []
     loss_history = []
-    solution_log_interval = 100
+    solution_log_interval = 1000
     solution_count = 0
     opt_state = optimizer.init(params)
     if do_wandb:
@@ -125,11 +125,11 @@ def gdsolve_verbose(
         )
         
         # import pdb; pdb.set_trace()
-        if descent_step % solution_log_interval == 0:
-            solutions = get_solutions(params, literal_tensor)
-            solution_count = len(solutions)
+        # if descent_step % solution_log_interval == 0:
+        #     solutions = get_solutions(params, literal_tensor)
+        #     solution_count = len(solutions)
             # solution_count = get_solutions(params, literal_tensor)
-        #print(f"descent_step: {descent_step}, Loss: {loss_values.sum()}, GradNorm:{ float(jnp.linalg.norm(grads))}, GradVar: {float(jnp.var(grads))}, Solutions: {solution_count}")
+        # print(f"descent_step: {descent_step}, Loss: {loss_values.sum()}, GradNorm:{ float(jnp.linalg.norm(grads))}, GradVar: {float(jnp.var(grads))}")
         loss_value = float(loss_values.sum())
         scaled_loss = loss_value / float(batch_size)
         #scaled_loss = jnp.log(jnp.exp(float(loss_value) / batch_size) * batch_size)

@@ -86,14 +86,16 @@ def init_problem(
 def init_optimizer(
     optimizer_str: str,
     learning_rate: float,
-    momentum: float = 0.0,
+    momentum: str = "0.0",
 ):
     if optimizer_str == "adamw":
         optimizer = optax.adamw(learning_rate=learning_rate)
     elif optimizer_str == "adam":
-        optimizer = optax.adam(learning_rate=learning_rate)
+        b1 = momentum.split(",")[0]
+        b2 = momentum.split(",")[1]
+        optimizer = optax.adam(learning_rate=learning_rate, b1=float(b1), b2=float(b2))
     elif optimizer_str == "sgd":
-        optimizer = optax.sgd(learning_rate=learning_rate, momentum=momentum)
+        optimizer = optax.sgd(learning_rate=learning_rate, momentum=float(momentum))
     else:
         raise NotImplementedError
     return optimizer

@@ -31,7 +31,19 @@ def parse_args():
         "--momentum",
         type=str,
         default="0.0,0.9,0.99",
-        help="Gradient descent momentum.",
+        help="Gradient descent momentum. Only applicable for SGD and RMSprop.",
+    )
+    parser.add_argument(
+        "--b1",
+        type=str,
+        default="0.0,0.5,0.9,0.99",
+        help="b1 value for Adam optimizer.",
+    )
+    parser.add_argument(
+        "--b2",
+        type=str,
+        default="0.9,0.99",
+        help="b2 value for Adam optimizer.",
     )
     parser.add_argument(
         "--num_steps",
