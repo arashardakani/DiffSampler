@@ -282,6 +282,7 @@ class SamplingRunner(object):
                 "execution_tput": steps_ran / elapsed_time,
             }
         )
+        logging.critical(f"Model runtime: {elapsed_time:.6f} seconds, Num solutions: {num_solutions}")
         # TODO: add support for exporting raw solutions found
         # if self.args.dump_solution:
         #     self.results[prob_id].update(
