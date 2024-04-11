@@ -116,7 +116,6 @@ def main():
     with open(args.constraints,'r') as f:
         csvFile = csv.reader(f)
         for line in csvFile:
-            print(line)
             if line[1] == '1':
                 clauses.append(f"{net_map[line[0]]} 0")
             elif line[1] == '0':
@@ -130,6 +129,7 @@ def main():
         clauses = '\n'.join(clauses)
         file.write(clauses)
 
+    #---------- Read in CNF and solve -----------
     cnf = CNF()
     cnf.from_file(args.output)
     s = Solver(name='g4')
