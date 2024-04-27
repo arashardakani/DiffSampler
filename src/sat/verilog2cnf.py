@@ -6,8 +6,148 @@ from pysat.formula import CNF
 from pysat.solvers import Solver
 import csv
 import os
+def parse_bench(input, output, constraints):
+    with open(input,'r') as f:
+        data = f.read()
+        f.seek(0)
+        lines = f.readlines()
 
-def parse_file(input, output, constraints, bench):
+    # print(data)
+    net_map = {}
+    variable_index = 1
+    assign_map = {}
+    input_list = []
+    output_list = []
+    for line in lines:
+        if line[0] == '#':
+            continue
+        elif "INPUT" in line:
+            pattern = r'INPUT\((.*?)\)'
+            match = re.search(pattern, line)
+            input = match.group(1)
+            net_map[input] = variable_index
+            variable_index += 1
+            input_list.append(input)
+        elif "OUTPUT" in line:
+            input = ""
+            pattern = r'OUTPUT\((.*?)\)'
+            match = re.search(pattern, line)
+            out = match.group(1)
+            net_map[out] = variable_index
+            variable_index += 1
+            output_list.append(out)
+        elif '=' in line:
+            pattern = r'(.*?)\s*='
+            match = re.search(pattern, line)
+            assignee = match.group(1)
+            net_map[assignee] = variable_index
+            variable_index += 1
+            pattern = r'\((.*)\)'
+            match = re.search(pattern, line, re.DOTALL)
+            operands = match.group(1)
+            operands = operands.replace(" ", "")
+            operands_list = operands.split(',')
+            if len(operands_list) == 1:
+                net_map[operands_list[0]] = variable_index
+                variable_index += 1
+            else:
+                net_map.update(dict([(item, index + variable_index) for index, item in enumerate(operands_list)]))
+                variable_index += len(operands_list)
+            pattern = r'=\s*(and|nand|or|nor|xor|xnor|buf|not)\('
+            match = re.search(pattern, line)
+            gate = match.group(1)
+            assign_map[assignee] = (gate, operands_list)
+        elif line == '\n':
+            continue
+        else:
+            raise ValueError(f"Unknown: {line}")  
+    # print(input_list)
+    # print(output_list)
+    clauses = []
+    for assignee, (gate, operands_list) in assign_map.items():
+        if gate == 'and':
+            exp = f'{net_map[assignee]}'
+            for inp in operands_list:
+                clauses.append(f'-{net_map[assignee]} {net_map[inp]} 0')
+                exp += f' -{net_map[inp]}'
+            exp += ' 0'
+            clauses.append(exp)
+        elif gate == 'nand':
+            exp = f'-{net_map[assignee]}'
+            for inp in operands_list:
+                clauses.append(f'{net_map[assignee]} {net_map[inp]} 0')
+                exp += f' -{net_map[inp]}'
+            exp += ' 0'
+            clauses.append(exp)
+        elif gate == 'or':
+            exp = f'-{net_map[assignee]}'
+            for inp in operands_list:
+                clauses.append(f'{net_map[assignee]} -{net_map[inp]} 0')
+                exp += f' {net_map[inp]}'
+            exp += ' 0'
+            clauses.append(exp)
+        elif gate == 'nor':
+            exp = f'{net_map[assignee]}'
+            for inp in operands_list:
+                clauses.append(f'-{net_map[assignee]} -{net_map[inp]} 0')
+                exp += f' {net_map[inp]}'
+            exp += ' 0'
+            clauses.append(exp)
+        elif gate == 'not':
+            clauses.append(f'{net_map[assignee]} {net_map[operands_list[0]]} 0')
+            clauses.append(f'-{net_map[assignee]} -{net_map[operands_list[0]]} 0')
+        elif gate == 'buf':
+            clauses.append(f'-{net_map[operands_list[0]]} {net_map[assignee]} 0')
+            clauses.append(f'{net_map[operands_list[0]]} -{net_map[assignee]} 0')
+        elif gate == 'xor':
+            while len(operands_list)>2:
+                #create new net
+                new_net = operands_list[-2]+operands_list[-1]
+                net_map[new_net] = len(net_map)+1
+
+                # add constraints
+                clauses.append(f'-{net_map[new_net]} -{net_map[operands_list[-1]]} -{net_map[operands_list[-2]]} 0')
+                clauses.append(f'-{net_map[new_net]} {net_map[operands_list[-1]]} {net_map[operands_list[-2]]} 0')
+                clauses.append(f'{net_map[new_net]} -{net_map[operands_list[-1]]} {net_map[operands_list[-2]]} 0')
+                clauses.append(f'{net_map[new_net]} {net_map[operands_list[-1]]} -{net_map[operands_list[-2]]} 0')
+
+                # remove last 2 nets
+                operands_list = operands_list[:-2]
+
+                # insert new net
+                operands_list.insert(0,new_net)
+
+            # add constraints
+            clauses.append(f'-{net_map[assignee]} -{net_map[operands_list[-1]]} -{net_map[operands_list[-2]]} 0')
+            clauses.append(f'-{net_map[assignee]} {net_map[operands_list[-1]]} {net_map[operands_list[-2]]} 0')
+            clauses.append(f'{net_map[assignee]} -{net_map[operands_list[-1]]} {net_map[operands_list[-2]]} 0')
+            clauses.append(f'{net_map[assignee]} {net_map[operands_list[-1]]} -{net_map[operands_list[-2]]} 0')
+        else:
+            raise ValueError(f"{gate} not supported")
+    
+    #---------- Constrain circuit nets ----------
+    if constraints != "":
+        with open(constraints,'r') as f:
+            csvFile = csv.reader(f)
+            for line in csvFile:
+                if line[1] == '1':
+                    clauses.append(f"{net_map[line[0]]} 0")
+                elif line[1] == '0':
+                    clauses.append(f"-{net_map[line[0]]} 0")
+                else:
+                    raise ValueError(f"Constraint is {line[1]}. Must be 1 or 0")
+    
+    
+    #---------- Write CNF in DIMACS Format -----------
+    with open(output, "w") as file:
+        file.write(f"p cnf {variable_index-1} {len(clauses)}\n")
+        clauses = '\n'.join(clauses)
+        file.write(clauses)
+    
+    return input_list, output_list
+
+
+def parse_verilog(input, output, constraints):
     with open(input,'r') as f:
         data = f.read()
         f.seek(0)
@@ -133,12 +273,16 @@ def parse_file(input, output, constraints, bench):
                 else:
                     raise ValueError(f"Constraint is {line[1]}. Must be 1 or 0")
     
+    
     #---------- Write CNF in DIMACS Format -----------
     with open(output, "w") as file:
         file.write(f"p cnf {variable_index-1} {len(clauses)}\n")
         clauses = '\n'.join(clauses)
         file.write(clauses)
+    
+    return input_list, output_list
 
+def solve_cnf(input_list, output_list, output):
     #---------- Read in CNF and solve -----------
     cnf = CNF()
     cnf.from_file(output)
@@ -166,7 +310,11 @@ def main():
     args = parser.parse_args()
 
     if args.input:
-        parse_file(args.input, args.output, args.constraints, args.bench_file)
+        if args.bench_file:
+            input_list, output_list = parse_bench(args.input, args.output, args.constraints)
+        else:
+            input_list, output_list = parse_verilog(args.input, args.output, args.constraints)
+        solve_cnf(input_list, output_list, args.output)
     elif args.input_dir:
         for filename in os.listdir(args.input_dir):
             input_file = os.path.join(args.input_dir, filename)
@@ -181,7 +329,11 @@ def main():
                     if not os.path.exists(constraints_file):
                         constraints_file = "" 
                         #raise ValueError(f"Constraints file for {base_name} does not exist in {args.constraints_dir}. Please include {constraints_file}") 
-                parse_file(input=input_file, output=output_file, constraints=constraints_file, bench=args.bench_file)
+                if args.bench_file:
+                    input_list, output_list = parse_bench(input=input_file, output=output_file, constraints=constraints_file)
+                else:
+                    input_list, output_list = parse_verilog(input=input_file, output=output_file, constraints=constraints_file)
+                solve_cnf(input_list, output_list, output_file)
     else:
         raise ValueError(f"input file or input dir must be specified")
 
