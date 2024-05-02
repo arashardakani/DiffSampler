@@ -7,7 +7,8 @@ from pysat.solvers import Solver
 import csv
 import os
 def parse_bench(input, output, constraints):
-    with open(input,'r') as f:
+    input_file = input
+    with open(input_file,'r') as f:
         data = f.read()
         f.seek(0)
         lines = f.readlines()
@@ -137,6 +138,48 @@ def parse_bench(input, output, constraints):
                 else:
                     raise ValueError(f"Constraint is {line[1]}. Must be 1 or 0")
     
+    #---------- Arash's Constraints ----------
+    module_name = input_file.split("/")[-1].replace(".bench", "")
+    if module_name in ["c17"]:
+        clauses.append(f"{net_map[output_list[-1]]} 0")
+    elif module_name in ["c432"]:
+        clauses.append(f"{net_map[output_list[0]]} 0")
+        clauses.append(f"-{net_map[output_list[-1]]} 0")
+    elif module_name in ["c880", "c1908", "c3540"]:
+        clauses.append(f"{net_map[output_list[0]]} 0")
+        clauses.append(f"-{net_map[output_list[15]]} 0")
+        clauses.append(f"{net_map[output_list[-1]]} 0")
+    elif module_name in ["c499", "c1355", "c6288"]:
+        clauses.append(f"{net_map[output_list[0]]} 0")
+        clauses.append(f"-{net_map[output_list[15]]} 0")
+        clauses.append(f"{net_map[output_list[-1]]} 0") 
+    else:
+        clauses.append(f"{net_map[output_list[0]]} 0")
+        clauses.append(f"-{net_map[output_list[15]]} 0")
+        clauses.append(f"{net_map[output_list[31]]} 0")
+        clauses.append(f"-{net_map[output_list[63]]} 0")
+        clauses.append(f"{net_map[output_list[-1]]} 0")
+
+    # elif module_name in ["c432"]:
+    #     output = torch.cat(( outputs_list[0], outputs_list[-1] ), dim = -1)
+    # elif module_name in ["c880", "c1908", "c3540"]:
+    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[-1] ), dim = -1)
+    # elif module_name in ["c499", "c1355", "c6288"]:
+    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[-1] ), dim = -1)
+    # else:
+    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[31], outputs_list[63], outputs_list[-1] ), dim = -1)
+    
+    # if module_name in ['c17']:
+    #     target = torch.ones((batch_size, 1), device=device) #torch.cat((d[0],d[2]), dim = -1)
+    # elif module_name in ['c432']:
+    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device) ), dim = -1)
+        
+    # elif module_name in ['c880', 'c1908', 'c3540']:
+    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device) ), dim = -1)
+    # elif module_name in ['c499', 'c1355', 'c6288']:
+    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device) ), dim = -1)
+    # else:
+    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device)), dim = -1)
     
     #---------- Write CNF in DIMACS Format -----------
     with open(output, "w") as file:
@@ -272,8 +315,7 @@ def parse_verilog(input, output, constraints):
                     clauses.append(f"-{net_map[line[0]]} 0")
                 else:
                     raise ValueError(f"Constraint is {line[1]}. Must be 1 or 0")
-    
-    
+                
     #---------- Write CNF in DIMACS Format -----------
     with open(output, "w") as file:
         file.write(f"p cnf {variable_index-1} {len(clauses)}\n")
