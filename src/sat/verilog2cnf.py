@@ -20,6 +20,7 @@ def parse_bench(input, output, constraints):
     input_list = []
     output_list = []
     for line in lines:
+        # print(line)
         if line[0] == '#':
             continue
         elif "INPUT" in line:
@@ -43,30 +44,43 @@ def parse_bench(input, output, constraints):
             assignee = match.group(1)
             net_map[assignee] = variable_index
             variable_index += 1
-            pattern = r'\((.*)\)'
-            match = re.search(pattern, line, re.DOTALL)
-            operands = match.group(1)
-            operands = operands.replace(" ", "")
-            operands_list = operands.split(',')
-            if len(operands_list) == 1:
-                net_map[operands_list[0]] = variable_index
-                variable_index += 1
+            if "1'b1" in line:
+                assign_map[assignee] = (None, [1]) 
+            elif "1'b0" in line:
+                assign_map[assignee] = (None, [0])
             else:
-                net_map.update(dict([(item, index + variable_index) for index, item in enumerate(operands_list)]))
-                variable_index += len(operands_list)
-            pattern = r'=\s*(and|nand|or|nor|xor|xnor|buf|not)\('
-            match = re.search(pattern, line)
-            gate = match.group(1)
-            assign_map[assignee] = (gate, operands_list)
+                pattern = r'\((.*)\)'
+                match = re.search(pattern, line, re.DOTALL)
+                operands = match.group(1)
+                operands = operands.replace(" ", "")
+                operands_list = operands.split(',')
+                if len(operands_list) == 1:
+                    net_map[operands_list[0]] = variable_index
+                    variable_index += 1
+                else:
+                    net_map.update(dict([(item, index + variable_index) for index, item in enumerate(operands_list)]))
+                    variable_index += len(operands_list)
+                pattern = r'=\s*(and|nand|or|nor|xor|xnor|buf|not)\('
+                match = re.search(pattern, line.lower())
+                gate = match.group(1)
+                assign_map[assignee] = (gate, operands_list)
         elif line == '\n':
             continue
         else:
             raise ValueError(f"Unknown: {line}")  
     # print(input_list)
     # print(output_list)
+    # print(net_map)
     clauses = []
     for assignee, (gate, operands_list) in assign_map.items():
-        if gate == 'and':
+        if gate is None:
+            if operands_list[0] == 0:
+                clauses.append(f'-{net_map[assignee]} 0')
+            elif operands_list[0] == 1:
+                clauses.append(f'{net_map[assignee]} 0')
+            else:
+                raise ValueError(f"Unknown binary assignment: {operands_list}")  
+        elif gate == 'and':
             exp = f'{net_map[assignee]}'
             for inp in operands_list:
                 clauses.append(f'-{net_map[assignee]} {net_map[inp]} 0')
@@ -139,7 +153,10 @@ def parse_bench(input, output, constraints):
                     raise ValueError(f"Constraint is {line[1]}. Must be 1 or 0")
     
     #---------- Arash's Constraints ----------
-    module_name = input_file.split("/")[-1].replace(".bench", "")
+    # print(output_list)
+    module_name = input_file.split("/")[-1].replace(".bench", "").replace("_unrolled", "").replace(".", "")
+
+    # print(module_name)
     if module_name in ["c17"]:
         clauses.append(f"{net_map[output_list[-1]]} 0")
     elif module_name in ["c432"]:
@@ -153,34 +170,33 @@ def parse_bench(input, output, constraints):
         clauses.append(f"{net_map[output_list[0]]} 0")
         clauses.append(f"-{net_map[output_list[15]]} 0")
         clauses.append(f"{net_map[output_list[-1]]} 0") 
+    elif module_name in ['s27', 's2081', 's298', 's386', 's400', 's4201', 's444', 's510', 's526', 's8381', 's938', 's1423']:
+        clauses.append(f"{net_map[output_list[-1]]} 0")
+    elif module_name in ['s635', 's526n', 's382']:
+        clauses.append(f"{-net_map[output_list[-1]]} 0")
+    elif module_name in ['s344', 's349', 's1196', 's1238', 's1269', 's3271', 's4863']:
+        clauses.append(f"-{net_map[output_list[0]]} 0")
+        clauses.append(f"{net_map[output_list[-1]]} 0")
+    elif module_name in ['s499', 's641', 's713', 's820', 's832', 's953', 's967', 's991', 's1488', 's1494', 's1512', 's3384', 's5378', 's6669', 's92341', 's9234', 's15850']:
+        clauses.append(f"{net_map[output_list[0]]} 0")
+        # clauses.append(f"{net_map[output_list[10]]} 0")
+        clauses.append(f"{-net_map[output_list[1]]} 0") 
     else:
+        # print("else clause")
         clauses.append(f"{net_map[output_list[0]]} 0")
         clauses.append(f"-{net_map[output_list[15]]} 0")
-        clauses.append(f"{net_map[output_list[31]]} 0")
-        clauses.append(f"-{net_map[output_list[63]]} 0")
+        clauses.append(f"-{net_map[output_list[31]]} 0")
+        clauses.append(f"{net_map[output_list[63]]} 0")
         clauses.append(f"{net_map[output_list[-1]]} 0")
-
-    # elif module_name in ["c432"]:
-    #     output = torch.cat(( outputs_list[0], outputs_list[-1] ), dim = -1)
-    # elif module_name in ["c880", "c1908", "c3540"]:
-    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[-1] ), dim = -1)
-    # elif module_name in ["c499", "c1355", "c6288"]:
-    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[-1] ), dim = -1)
-    # else:
-    #     output = torch.cat(( outputs_list[0], outputs_list[15], outputs_list[31], outputs_list[63], outputs_list[-1] ), dim = -1)
-    
-    # if module_name in ['c17']:
+   
+    # if module_name in ['s27', 's2081', 's298','s382', 's386', 's400', 's4201', 's444', 's510', 's526', 's526n', 's635', 's8381', 's938', 's1423']:
     #     target = torch.ones((batch_size, 1), device=device) #torch.cat((d[0],d[2]), dim = -1)
-    # elif module_name in ['c432']:
-    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device) ), dim = -1)
-        
-    # elif module_name in ['c880', 'c1908', 'c3540']:
-    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device) ), dim = -1)
-    # elif module_name in ['c499', 'c1355', 'c6288']:
-    #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device) ), dim = -1)
+    # elif module_name in ['s344', 's349', 's1196', 's1238', 's1269', 's3271', 's4863']:
+    #     target = torch.cat((torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device) ), dim = -1)
+    # elif module_name in ['s499', 's641', 's713', 's820', 's832', 's953', 's967', 's991', 's1488', 's1494', 's1512', 's3384', 's5378', 's6669', 's92341', 's9234']:
+    #     target = torch.cat((torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device) ), dim = -1)
     # else:
     #     target = torch.cat((torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device), torch.zeros((batch_size, 1), device=device), torch.ones((batch_size, 1), device=device)), dim = -1)
-    
     #---------- Write CNF in DIMACS Format -----------
     with open(output, "w") as file:
         file.write(f"p cnf {variable_index-1} {len(clauses)}\n")
@@ -333,10 +349,14 @@ def solve_cnf(input_list, output_list, output):
         s.add_clause(clause)
     s.solve()
     solution = s.get_model()
-    input_sol = zip(input_list, map(lambda x: 0 if x < 0 else 1, solution[:len(input_list)]))
-    output_sol = zip(output_list, map(lambda x: 0 if x < 0 else 1, solution[len(input_list):len(input_list) + len(output_list)]))
+    if solution is not None:
+        # print(solution)
+        input_sol = zip(input_list, map(lambda x: 0 if x < 0 else 1, solution[:len(input_list)]))
+        output_sol = zip(output_list, map(lambda x: 0 if x < 0 else 1, solution[len(input_list):len(input_list) + len(output_list)]))
+        # print(list(input_sol))
+    else:
+        print(output)
     
-    print(list(input_sol))
 
 def main():
     parser = argparse.ArgumentParser()
